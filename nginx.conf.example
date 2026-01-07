@@ -1,0 +1,23 @@
+# Image resize endpoints - check cache first for base64 format, then forward to PHP
+# Handles both base64 format (/media/resize/{base64}.{ext}) and query string format (/media/resize/{imagePath}?params)
+# For base64 URLs: /media/resize/{base64}.{ext} -> check /media/cache/resize/{base64}.{ext}
+# For query string URLs: /media/resize/{path} -> forward to PHP (PHP handles cache)
+# Try cache first (for base64 format), if not found forward to PHP (handles both formats)
+location ~ ^/media/resize/(.+)$ {
+    set $cache_filename $1;  # $1 captures the filename (after /media/resize/)
+    set $attempted_cache_path /media/cache/resize/$cache_filename;
+    
+    # Try to find cached file directly (works for base64 format), if not found forward to PHP
+    # PHP will detect if it's base64 or query string format and handle accordingly
+    try_files /media/cache/resize/$cache_filename /index.php$is_args$args;
+    
+    # Cache headers for cached files (only applied when nginx serves directly, NOT for PHP redirects)
+    expires 1y;
+    add_header Cache-Control "public, immutable" always;
+    add_header X-Cache-Status "HIT" always;
+    add_header X-Served-By "nginx" always;
+    add_header X-Cache-Path-Attempted $attempted_cache_path always;
+    add_header X-Request-Uri $uri always;
+    access_log off;
+}
+
