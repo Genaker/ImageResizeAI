@@ -1,0 +1,64 @@
+{
+    "name": "genaker/imageaibundle",
+    "description": "Magento 2 module for intelligent image resizing with caching and AI-powered image modification support using Google Gemini API",
+    "type": "magento2-module",
+    "version": "1.0.0",
+    "license": [
+        "proprietary"
+    ],
+    "authors": [
+        {
+            "name": "Genaker",
+            "email": "info@genaker.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "magento/framework": ">=102.0.0",
+        "magento/module-store": ">=101.0.0",
+        "magento/module-backend": ">=101.0.0",
+        "magento/module-config": ">=101.0.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0"
+    },
+    "autoload": {
+        "files": [
+            "app/code/Genaker/ImageAIBundle/registration.php"
+        ],
+        "psr-4": {
+            "Genaker\\ImageAIBundle\\": "app/code/Genaker/ImageAIBundle/"
+        }
+    },
+    "extra": {
+        "map": [
+            [
+                "*",
+                "Genaker/ImageAIBundle"
+            ]
+        ]
+    },
+    "keywords": [
+        "magento2",
+        "magento",
+        "magento2-module",
+        "image-resize",
+        "image-optimization",
+        "webp",
+        "image-cache",
+        "gemini",
+        "ai-image",
+        "image-processing"
+    ],
+    "support": {
+        "issues": "https://github.com/Genaker/ImageResizeAI/issues",
+        "source": "https://github.com/Genaker/ImageResizeAI"
+    },
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://repo.magento.com/"
+        }
+    ]
+}
+

@@ -1,0 +1,27 @@
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Composer
+/vendor/
+composer.lock
+
+# Magento
+/var/
+/pub/static/
+/pub/media/cache/
+/pub/media/tmp/
+/pub/media/import/
+/app/etc/env.php
+/app/etc/config.php
+
+# Logs
+*.log
+
