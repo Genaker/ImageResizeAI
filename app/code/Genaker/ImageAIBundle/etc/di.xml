@@ -18,13 +18,6 @@
             <argument name="scopeConfig" xsi:type="object">Magento\Framework\App\Config\ScopeConfigInterface</argument>
         </arguments>
     </type>
-
-    <!-- Gemini Client Instance -->
-    <type name="Gemini\Client">
-        <arguments>
-            <argument name="apiKey" xsi:type="string">dummy</argument>
-        </arguments>
-    </type>
     
     <!-- Gemini Image Modification Service -->
     <type name="Genaker\ImageAIBundle\Service\GeminiImageModificationService">
