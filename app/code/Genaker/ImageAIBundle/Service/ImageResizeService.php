@@ -26,18 +26,21 @@ class ImageResizeService implements ImageResizeServiceInterface
     private File $filesystem;
     private AdapterFactory $imageFactory;
     private LoggerInterface $logger;
+    private ?GeminiImageModificationService $geminiService;
     private string $mediaPath;
 
     public function __construct(
         ScopeConfigInterface $scopeConfig,
         File $filesystem,
         AdapterFactory $imageFactory,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        GeminiImageModificationService $geminiService = null
     ) {
         $this->scopeConfig = $scopeConfig;
         $this->filesystem = $filesystem;
         $this->imageFactory = $imageFactory;
         $this->logger = $logger;
+        $this->geminiService = $geminiService;
         $this->mediaPath = BP . '/pub/media';
     }
 
@@ -69,8 +72,44 @@ class ImageResizeService implements ImageResizeServiceInterface
             throw new \InvalidArgumentException("Source image not found: {$imagePath}");
         }
         
-        // Process image
-        $this->processImage($sourcePath, $cacheFilePath, $normalizedParams);
+        // Apply Gemini AI modification if prompt is provided and allowed
+        $workingImagePath = $sourcePath;
+        $isGeminiModified = false;
+        
+        if (!empty($normalizedParams['prompt']) && $allowPrompt) {
+            if ($this->geminiService && $this->geminiService->isAvailable()) {
+                try {
+                    $geminiWidth = $normalizedParams['w'] ?? null;
+                    $geminiHeight = $normalizedParams['h'] ?? null;
+                    
+                    $modifiedImagePath = $this->geminiService->modifyImage(
+                        $sourcePath,
+                        $normalizedParams['prompt'],
+                        $geminiWidth,
+                        $geminiHeight
+                    );
+                    $workingImagePath = $modifiedImagePath;
+                    $isGeminiModified = true;
+                } catch (\Exception $e) {
+                    $this->logger->error('Gemini image modification failed', [
+                        'error' => $e->getMessage(),
+                        'image' => $imagePath,
+                        'prompt' => $normalizedParams['prompt']
+                    ]);
+                    throw new \RuntimeException('Gemini AI image modification failed: ' . $e->getMessage(), 0, $e);
+                }
+            } else {
+                throw new \RuntimeException('Gemini AI service is not available. Please configure the Gemini API key.');
+            }
+        }
+        
+        // Process image (use Gemini-modified image if available)
+        $this->processImage($workingImagePath, $cacheFilePath, $normalizedParams);
+        
+        // Clean up temporary Gemini-modified file if created
+        if ($isGeminiModified && file_exists($workingImagePath)) {
+            @unlink($workingImagePath);
+        }
         
         // Get result metadata
         $mimeType = $this->getImageMimeType($cacheFilePath);
@@ -157,6 +196,14 @@ class ImageResizeService implements ImageResizeServiceInterface
             throw new \InvalidArgumentException("Format must be one of: " . implode(', ', $allowedFormats));
         }
         $normalized['f'] = $format;
+        
+        // Prompt - Gemini AI modification prompt (no validation, just trim)
+        if (isset($params['prompt']) && $params['prompt'] !== null && $params['prompt'] !== '') {
+            $prompt = trim((string) $params['prompt']);
+            if (!empty($prompt)) {
+                $normalized['prompt'] = $prompt;
+            }
+        }
         
         return $normalized;
     }

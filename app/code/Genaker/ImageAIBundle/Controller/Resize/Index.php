@@ -18,6 +18,7 @@ use Magento\Framework\Controller\Result\Raw;
 use Magento\Framework\Controller\ResultFactory;
 use Magento\Framework\Exception\NotFoundException;
 use Magento\Framework\HTTP\Header;
+use Magento\Backend\Model\Auth\Session;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -29,19 +30,22 @@ class Index extends Action
     private ScopeConfigInterface $scopeConfig;
     private LoggerInterface $logger;
     private Header $httpHeader;
+    private Session $authSession;
 
     public function __construct(
         Context $context,
         ImageResizeServiceInterface $imageResizeService,
         ScopeConfigInterface $scopeConfig,
         LoggerInterface $logger,
-        Header $httpHeader
+        Header $httpHeader,
+        Session $authSession = null
     ) {
         parent::__construct($context);
         $this->imageResizeService = $imageResizeService;
         $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
         $this->httpHeader = $httpHeader;
+        $this->authSession = $authSession ?? \Magento\Framework\App\ObjectManager::getInstance()->get(Session::class);
     }
 
     /**
@@ -70,12 +74,18 @@ class Index extends Action
 
         try {
             // Validate signature if enabled
+            $allowPrompt = false;
             if ($this->isSignatureEnabled()) {
                 $this->validateSignature($imagePath, $params);
+                // If signature is validated, allow prompts (signature provides security)
+                $allowPrompt = true;
+            } else {
+                // Check if user is admin (for cases without signature)
+                $allowPrompt = $this->isAdmin();
             }
 
             // Resize image
-            $result = $this->imageResizeService->resizeImage($imagePath, $params, false);
+            $result = $this->imageResizeService->resizeImage($imagePath, $params, $allowPrompt);
 
             // Return image file
             /** @var Raw $resultRaw */
@@ -148,6 +158,24 @@ class Index extends Action
         $paramString = http_build_query($filteredParams);
         $signatureString = $imagePath . '|' . $paramString . '|' . $salt;
         return md5($signatureString);
+    }
+
+    /**
+     * Check if current user is admin
+     *
+     * @return bool
+     */
+    private function isAdmin(): bool
+    {
+        try {
+            if ($this->authSession && $this->authSession->isLoggedIn()) {
+                $user = $this->authSession->getUser();
+                return $user && $user->getId();
+            }
+        } catch (\Exception $e) {
+            // Ignore errors
+        }
+        return false;
     }
 }
 
