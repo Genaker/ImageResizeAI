@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <!--
 /**
- * Genaker ImageBundle Module Configuration
+ * Genaker ImageAIBundle Module Configuration
  *
  * @category    Genaker
- * @package     Genaker_ImageBundle
+ * @package     Genaker_ImageAIBundle
  * @author      Genaker
  * @copyright   Copyright (c) 2024 Genaker
  */
