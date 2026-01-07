@@ -38,10 +38,19 @@
         </arguments>
     </type>
     
+    <!-- Lock Manager Service -->
+    <type name="Genaker\ImageAIBundle\Service\LockManager">
+        <arguments>
+            <argument name="lockManager" xsi:type="object">Magento\Framework\Lock\LockManagerInterface</argument>
+            <argument name="scopeConfig" xsi:type="object">Magento\Framework\App\Config\ScopeConfigInterface</argument>
+        </arguments>
+    </type>
+
     <type name="Genaker\ImageAIBundle\Controller\Resize\Index">
         <arguments>
             <argument name="imageResizeService" xsi:type="object">Genaker\ImageAIBundle\Service\ImageResizeService</argument>
             <argument name="logger" xsi:type="object">Psr\Log\LoggerInterface</argument>
+            <argument name="lockManager" xsi:type="object">Genaker\ImageAIBundle\Service\LockManager</argument>
         </arguments>
     </type>
     

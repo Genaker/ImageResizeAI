@@ -11,6 +11,7 @@
 namespace Genaker\ImageAIBundle\Controller\Resize;
 
 use Genaker\ImageAIBundle\Api\ImageResizeServiceInterface;
+use Genaker\ImageAIBundle\Service\LockManager;
 use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Config\ScopeConfigInterface;
@@ -31,6 +32,7 @@ class Index extends Action
     private LoggerInterface $logger;
     private Header $httpHeader;
     private Session $authSession;
+    private LockManager $lockManager;
 
     public function __construct(
         Context $context,
@@ -38,6 +40,7 @@ class Index extends Action
         ScopeConfigInterface $scopeConfig,
         LoggerInterface $logger,
         Header $httpHeader,
+        LockManager $lockManager = null,
         Session $authSession = null
     ) {
         parent::__construct($context);
@@ -45,6 +48,7 @@ class Index extends Action
         $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
         $this->httpHeader = $httpHeader;
+        $this->lockManager = $lockManager ?? \Magento\Framework\App\ObjectManager::getInstance()->get(LockManager::class);
         $this->authSession = $authSession ?? \Magento\Framework\App\ObjectManager::getInstance()->get(Session::class);
     }
 
@@ -167,6 +171,9 @@ class Index extends Action
     {
 
         try {
+            // Start timing
+            $startTime = microtime(true);
+            
             // Validate signature if enabled (skip for base64 URLs as they're already validated)
             $allowPrompt = false;
             if (!$skipSignatureValidation && $this->isSignatureEnabled()) {
@@ -181,14 +188,37 @@ class Index extends Action
                 $allowPrompt = $this->isAdmin();
             }
 
-            // Resize image
-            $result = $this->imageResizeService->resizeImage($imagePath, $params, $allowPrompt);
+            // Acquire lock for this image resize operation to prevent race conditions
+            $lockAcquired = false;
+            if ($this->lockManager->isAvailable()) {
+                $lockAcquired = $this->lockManager->acquireLock($imagePath, $params);
+                
+                // If lock cannot be acquired after retries, return original image
+                if (!$lockAcquired) {
+                    return $this->returnOriginalImage($imagePath);
+                }
+            }
+
+            try {
+                // Resize image
+                $result = $this->imageResizeService->resizeImage($imagePath, $params, $allowPrompt);
+            } finally {
+                // Always release lock if acquired
+                if ($lockAcquired) {
+                    $this->lockManager->releaseLock($imagePath, $params);
+                }
+            }
+            
+            // Calculate duration
+            $duration = microtime(true) - $startTime;
+            $durationMs = round($duration * 1000, 2);
 
             // Return image file
             /** @var Raw $resultRaw */
             $resultRaw = $this->resultFactory->create(ResultFactory::TYPE_RAW);
             $resultRaw->setHeader('Content-Type', $result->getMimeType());
             $resultRaw->setHeader('X-Cache-Status', $result->isFromCache() ? 'HIT' : 'MISS');
+            $resultRaw->setHeader('X-Generation-Duration', (string)$durationMs . 'ms');
             $resultRaw->setHeader('Cache-Control', 'public, max-age=31536000');
             
             $fileContent = file_get_contents($result->getFilePath());
@@ -321,6 +351,49 @@ class Index extends Action
     {
         // Check if it contains at least one key=value pair
         return preg_match('/^[a-zA-Z0-9_\.\[\]-]+=[^&]*(&[a-zA-Z0-9_\.\[\]-]+=[^&]*)*$/', $string) === 1;
+    }
+
+    /**
+     * Return original image with no-cache headers when lock cannot be acquired
+     *
+     * @param string $imagePath
+     * @return Raw
+     * @throws NotFoundException
+     */
+    private function returnOriginalImage(string $imagePath): Raw
+    {
+        try {
+            $sourcePath = $this->imageResizeService->getOriginalImagePath($imagePath);
+        } catch (\Exception $e) {
+            throw new NotFoundException(__('Image not found: %1', $imagePath));
+        }
+
+        // Validate source exists and is readable
+        if (!file_exists($sourcePath) || !is_readable($sourcePath)) {
+            throw new NotFoundException(__('Image not found: %1', $imagePath));
+        }
+
+        // Get MIME type
+        $mimeType = mime_content_type($sourcePath) ?: 'image/jpeg';
+
+        // Create response with original image
+        /** @var Raw $resultRaw */
+        $resultRaw = $this->resultFactory->create(ResultFactory::TYPE_RAW);
+        $resultRaw->setHeader('Content-Type', $mimeType);
+        
+        // Set no-cache headers to prevent caching of original image
+        $resultRaw->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        $resultRaw->setHeader('Pragma', 'no-cache');
+        $resultRaw->setHeader('Expires', '0');
+        
+        // Add header to indicate this is the original image (not resized)
+        $resultRaw->setHeader('X-Image-Original', 'true');
+        $resultRaw->setHeader('X-Lock-Timeout', 'true');
+        
+        $fileContent = file_get_contents($sourcePath);
+        $resultRaw->setContents($fileContent);
+
+        return $resultRaw;
     }
 }
 

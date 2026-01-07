@@ -59,7 +59,7 @@ class ImageResizeService implements ImageResizeServiceInterface
         // Generate cache file path
         $cacheFilePath = $this->generateCacheFilePath($imagePath, $normalizedParams, $extension);
         
-        // Check cache
+        // Check cache FIRST before doing any expensive operations (like Gemini API calls)
         if ($this->filesystem->isExists($cacheFilePath)) {
             $mimeType = $this->getImageMimeType($cacheFilePath);
             $fileSize = $this->filesystem->stat($cacheFilePath)['size'];
@@ -73,6 +73,7 @@ class ImageResizeService implements ImageResizeServiceInterface
         }
         
         // Apply Gemini AI modification if prompt is provided and allowed
+        // NOTE: This only runs if cache doesn't exist (cache check happened above)
         $workingImagePath = $sourcePath;
         $isGeminiModified = false;
         
@@ -101,6 +102,17 @@ class ImageResizeService implements ImageResizeServiceInterface
             } else {
                 throw new \RuntimeException('Gemini AI service is not available. Please configure the Gemini API key.');
             }
+        }
+        
+        // Double-check cache (another process might have created it while we were processing)
+        if ($this->filesystem->isExists($cacheFilePath)) {
+            // Clean up temporary Gemini-modified file if it was created
+            if ($isGeminiModified && file_exists($workingImagePath)) {
+                @unlink($workingImagePath);
+            }
+            $mimeType = $this->getImageMimeType($cacheFilePath);
+            $fileSize = $this->filesystem->stat($cacheFilePath)['size'];
+            return new ResizeResult($cacheFilePath, $mimeType, $fileSize, true, $cacheKey);
         }
         
         // Process image (use Gemini-modified image if available)
