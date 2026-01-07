@@ -19,6 +19,7 @@ use Magento\Framework\Filesystem\Driver\File;
  */
 class GeminiImageModificationService
 {
+    private GeminiClientFactory $clientFactory;
     private ?\Gemini\Client $client;
     private LoggerInterface $logger;
     private File $filesystem;
@@ -26,12 +27,13 @@ class GeminiImageModificationService
     private bool $available;
 
     public function __construct(
-        ?\Gemini\Client $client = null,
+        GeminiClientFactory $clientFactory,
         LoggerInterface $logger = null,
         File $filesystem = null,
         string $model = 'gemini-2.0-flash-exp'
     ) {
-        $this->client = $client;
+        $this->clientFactory = $clientFactory;
+        $this->client = $clientFactory->createClient();
         $this->logger = $logger ?? \Magento\Framework\App\ObjectManager::getInstance()->get(LoggerInterface::class);
         $this->filesystem = $filesystem ?? \Magento\Framework\App\ObjectManager::getInstance()->get(File::class);
         $this->model = $model;
