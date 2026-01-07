@@ -20,6 +20,15 @@ use Magento\Framework\App\Cache\Type\FrontendPool;
  */
 class LockManager
 {
+    /** @var int Default number of retry attempts */
+    private const DEFAULT_RETRY_COUNT = 3;
+
+    /** @var float Default lock TTL in seconds */
+    private const DEFAULT_TTL = 3.0;
+
+    /** @var string Prefix for lock keys in Redis */
+    private const LOCK_PREFIX = 'IMAGE_RESIZE_LOCK_';
+
     private ?FrontendInterface $cache;
     private ScopeConfigInterface $scopeConfig;
     private int $defaultRetryCount;
@@ -29,16 +38,16 @@ class LockManager
     /**
      * @param FrontendPool|null $cachePool Cache pool to get Redis cache frontend
      * @param ScopeConfigInterface|null $scopeConfig Scope config for retry count
-     * @param int $defaultRetryCount Default number of retry attempts (default: 3)
-     * @param float $defaultTtl Default lock TTL in seconds (default: 3.0 seconds)
-     * @param string $lockPrefix Prefix for lock keys in Redis
+     * @param int|null $defaultRetryCount Number of retry attempts (defaults to DEFAULT_RETRY_COUNT)
+     * @param float|null $defaultTtl Lock TTL in seconds (defaults to DEFAULT_TTL)
+     * @param string|null $lockPrefix Prefix for lock keys in Redis (defaults to LOCK_PREFIX)
      */
     public function __construct(
         FrontendPool $cachePool = null,
         ScopeConfigInterface $scopeConfig = null,
-        int $defaultRetryCount = 3,
-        float $defaultTtl = 3.0, // TTL in seconds
-        string $lockPrefix = 'IMAGE_RESIZE_LOCK_'
+        ?int $defaultRetryCount = null,
+        ?float $defaultTtl = null,
+        ?string $lockPrefix = null
     ) {
         // Use default cache frontend (which should be Redis if configured)
         $this->cache = $cachePool ? $cachePool->get('default') : null;
@@ -54,9 +63,9 @@ class LockManager
         
         $this->scopeConfig = $scopeConfig ?? \Magento\Framework\App\ObjectManager::getInstance()
             ->get(ScopeConfigInterface::class);
-        $this->defaultRetryCount = $defaultRetryCount;
-        $this->defaultTtl = $defaultTtl;
-        $this->lockPrefix = $lockPrefix;
+        $this->defaultRetryCount = $defaultRetryCount ?? self::DEFAULT_RETRY_COUNT;
+        $this->defaultTtl = $defaultTtl ?? self::DEFAULT_TTL;
+        $this->lockPrefix = $lockPrefix ?? self::LOCK_PREFIX;
     }
 
     /**
@@ -181,7 +190,7 @@ class LockManager
     /**
      * Get TTL from configuration
      *
-     * @return float TTL in seconds (default: 3.0 seconds)
+     * @return float TTL in seconds
      */
     private function getTtl(): float
     {
