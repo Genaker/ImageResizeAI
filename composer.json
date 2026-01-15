@@ -2,6 +2,7 @@
     "name": "genaker/imageaibundle",
     "description": "Magento 2 module for intelligent image resizing with caching and AI-powered image modification support using Google Gemini API",
     "type": "magento2-module",
+    "version": 1.0.2,
     "license": [
         "proprietary"
     ],
