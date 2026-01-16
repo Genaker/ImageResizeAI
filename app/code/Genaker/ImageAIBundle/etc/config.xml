@@ -17,6 +17,8 @@
                 <signature_salt></signature_salt>
                 <regular_url_enabled>1</regular_url_enabled>
                 <gemini_api_key></gemini_api_key>
+                <gemini_cache_enabled>1</gemini_cache_enabled>
+                <video_cache_enabled>0</video_cache_enabled>
                 <lock_retry_count>3</lock_retry_count>
                 <use_file_manager_for_cache>0</use_file_manager_for_cache>
             </general>

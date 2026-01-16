@@ -33,7 +33,7 @@ class GeminiClientFactory
     public function createClient(): ?\Gemini\Client
     {
         // Check if Gemini SDK is available
-        if (!class_exists('\Gemini\Client')) {
+        if (!class_exists('\Gemini\Client') && !class_exists('\Gemini')) {
             return null;
         }
 
@@ -45,6 +45,11 @@ class GeminiClientFactory
         }
 
         try {
+            // Use Gemini factory to create client with API key
+            if (class_exists('\Gemini')) {
+                return \Gemini::client($apiKey);
+            }
+            // Fallback to direct instantiation if factory doesn't exist
             return new \Gemini\Client(apiKey: $apiKey);
         } catch (\Exception $e) {
             return null;

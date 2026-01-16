@@ -12,10 +12,12 @@ namespace Genaker\ImageAIBundle\Controller\Resize;
 
 use Genaker\ImageAIBundle\Api\ImageResizeServiceInterface;
 use Genaker\ImageAIBundle\Service\LockManager;
+use Genaker\ImageAIBundle\Service\GeminiVideoDirectService;
 use Magento\Framework\App\Action\Action;
 use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Controller\Result\Raw;
+use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\ResultFactory;
 use Magento\Framework\Exception\NotFoundException;
 use Magento\Framework\HTTP\Header;
@@ -33,6 +35,7 @@ class Index extends Action
     private Header $httpHeader;
     private Session $authSession;
     private LockManager $lockManager;
+    private GeminiVideoDirectService $videoService;
 
     public function __construct(
         Context $context,
@@ -41,13 +44,15 @@ class Index extends Action
         LoggerInterface $logger,
         Header $httpHeader,
         LockManager $lockManager = null,
-        Session $authSession = null
+        Session $authSession = null,
+        GeminiVideoDirectService $videoService = null
     ) {
         parent::__construct($context);
         $this->imageResizeService = $imageResizeService;
         $this->scopeConfig = $scopeConfig;
         $this->logger = $logger;
         $this->httpHeader = $httpHeader;
+        $this->videoService = $videoService ?? \Magento\Framework\App\ObjectManager::getInstance()->get(GeminiVideoDirectService::class);
         $this->lockManager = $lockManager ?? \Magento\Framework\App\ObjectManager::getInstance()->get(LockManager::class);
         $this->authSession = $authSession ?? \Magento\Framework\App\ObjectManager::getInstance()->get(Session::class);
     }
@@ -60,7 +65,11 @@ class Index extends Action
      */
     public function execute()
     {
-        $imagePath = $this->getRequest()->getParam('imagePath', '');
+        // Support both 'ip' (short) and 'imagePath' (long) parameters for backward compatibility
+        $imagePath = $this->getRequest()->getParam('ip', '');
+        if (empty($imagePath)) {
+            $imagePath = $this->getRequest()->getParam('imagePath', '');
+        }
         
         if (empty($imagePath)) {
             throw new NotFoundException(__('Image path is required'));
@@ -156,7 +165,178 @@ class Index extends Action
             }
         }
         
+        // Check if video generation is requested
+        $isVideo = $this->getRequest()->getParam('video') === 'true' || $this->getRequest()->getParam('video') === '1';
+        
+        if ($isVideo) {
+            return $this->processVideoGeneration($imagePath);
+        }
+        
         return $this->processResize($imagePath, $params, false);
+    }
+
+    /**
+     * Process video generation request
+     *
+     * @param string $imagePath
+     * @return \Magento\Framework\Controller\ResultInterface
+     */
+    private function processVideoGeneration(string $imagePath)
+    {
+        try {
+            // Get video parameters
+            $prompt = $this->getRequest()->getParam('prompt', '');
+            $aspectRatio = $this->getRequest()->getParam('aspectRatio', '16:9');
+            $poll = $this->getRequest()->getParam('poll') === 'true' || $this->getRequest()->getParam('poll') === '1';
+            $operationName = $this->getRequest()->getParam('operation');
+            $silentVideo = $this->getRequest()->getParam('silentVideo') === 'true' || 
+                          $this->getRequest()->getParam('silentVideo') === '1' ||
+                          $this->getRequest()->getParam('silent') === 'true' ||
+                          $this->getRequest()->getParam('silent') === '1';
+            $returnVideo = $this->getRequest()->getParam('return') === 'video';
+
+            if (empty($prompt) && empty($operationName)) {
+                throw new NotFoundException(__('Prompt parameter is required for video generation'));
+            }
+
+            // Check if video service is available
+            if (!$this->videoService->isAvailable()) {
+                // Provide more helpful error message
+                $errorMsg = 'Video generation service is not available. ';
+                if (!$this->videoService->isAvailable()) {
+                    $errorMsg .= 'Please ensure: 1) Gemini API key is configured, 2) Gemini SDK supports Veo 3.1 API (generateVideos method).';
+                }
+                throw new NotFoundException(__($errorMsg));
+            }
+
+            // Validate signature/prompt access (same logic as image)
+            $allowPrompt = false;
+            try {
+                if ($this->isSignatureEnabled()) {
+                    $params = ['prompt' => $prompt];
+                    $this->validateSignature($imagePath, $params);
+                    $allowPrompt = true;
+                } else {
+                    $allowPrompt = true; // Signature disabled = allow prompts
+                }
+            } catch (\Exception $e) {
+                if (!$this->isSignatureEnabled()) {
+                    $allowPrompt = true;
+                } else {
+                    $allowPrompt = $this->isAdmin();
+                }
+            }
+
+            if (!$allowPrompt) {
+                throw new NotFoundException(__('Video generation requires admin login or signature validation'));
+            }
+
+            // Resolve source image path
+            $sourcePath = BP . '/pub/media/' . $imagePath;
+            if (!file_exists($sourcePath)) {
+                throw new NotFoundException(__('Source image not found: %1', $imagePath));
+            }
+
+            // If operation name provided, poll for completion
+            if (!empty($operationName)) {
+                $result = $this->videoService->pollVideoOperation($operationName);
+                
+                // If return=video, return video content directly
+                if ($returnVideo && isset($result['videoPath']) && file_exists($result['videoPath'])) {
+                    return $this->returnVideoContent($result['videoPath']);
+                }
+                
+                /** @var Json $resultJson */
+                $resultJson = $this->resultFactory->create(ResultFactory::TYPE_JSON);
+                $resultJson->setData([
+                    'success' => true,
+                    'status' => 'completed',
+                    'videoUrl' => $result['videoUrl'],
+                    'embedUrl' => $result['embedUrl'],
+                    'videoPath' => $result['videoPath']
+                ]);
+                
+                return $resultJson;
+            }
+
+            // Start video generation
+            $operation = $this->videoService->generateVideoFromImage($sourcePath, $prompt, $aspectRatio, $silentVideo);
+
+            // Check if video was returned from cache
+            if (isset($operation['fromCache']) && $operation['fromCache'] === true) {
+                // If return=video, return video content directly
+                if ($returnVideo && isset($operation['videoPath']) && file_exists($operation['videoPath'])) {
+                    return $this->returnVideoContent($operation['videoPath']);
+                }
+                
+                // Video was cached, return JSON
+                /** @var Json $resultJson */
+                $resultJson = $this->resultFactory->create(ResultFactory::TYPE_JSON);
+                $resultJson->setData([
+                    'success' => true,
+                    'status' => 'completed',
+                    'videoUrl' => $operation['videoUrl'],
+                    'embedUrl' => $operation['embedUrl'],
+                    'videoPath' => $operation['videoPath'],
+                    'cached' => true
+                ]);
+                
+                return $resultJson;
+            }
+
+            // If poll=true, wait for completion (synchronous)
+            if ($poll) {
+                // Pass cache key if available for proper caching
+                $cacheKey = $operation['cacheKey'] ?? null;
+                $result = $this->videoService->pollVideoOperation($operation['operationName'], 300, 10, $cacheKey);
+                
+                // If return=video, return video content directly
+                if ($returnVideo && isset($result['videoPath']) && file_exists($result['videoPath'])) {
+                    return $this->returnVideoContent($result['videoPath']);
+                }
+                
+                /** @var Json $resultJson */
+                $resultJson = $this->resultFactory->create(ResultFactory::TYPE_JSON);
+                $resultJson->setData([
+                    'success' => true,
+                    'status' => 'completed',
+                    'videoUrl' => $result['videoUrl'],
+                    'embedUrl' => $result['embedUrl'],
+                    'videoPath' => $result['videoPath']
+                ]);
+                
+                return $resultJson;
+            }
+
+            // Return operation ID for async polling
+            /** @var Json $resultJson */
+            $resultJson = $this->resultFactory->create(ResultFactory::TYPE_JSON);
+            $resultJson->setData([
+                'success' => true,
+                'status' => 'processing',
+                'operationName' => $operation['operationName'],
+                'message' => 'Video generation started. Poll with ?operation=' . $operation['operationName'] . '&poll=true'
+            ]);
+            
+            return $resultJson;
+
+        } catch (\Exception $e) {
+            $this->logger->error('Video generation error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'image' => $imagePath,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            /** @var Json $resultJson */
+            $resultJson = $this->resultFactory->create(ResultFactory::TYPE_JSON);
+            $resultJson->setData([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+            $resultJson->setHttpResponseCode(500);
+            
+            return $resultJson;
+        }
     }
 
     /**
@@ -176,36 +356,78 @@ class Index extends Action
             
             // Validate signature if enabled (skip for base64 URLs as they're already validated)
             $allowPrompt = false;
-            if (!$skipSignatureValidation && $this->isSignatureEnabled()) {
-                $this->validateSignature($imagePath, $params);
-                // If signature is validated, allow prompts (signature provides security)
-                $allowPrompt = true;
-            } elseif ($skipSignatureValidation) {
-                // Base64 URLs already validated signature, allow prompts
-                $allowPrompt = true;
-            } else {
-                // Check if user is admin (for cases without signature)
-                $allowPrompt = $this->isAdmin();
+            try {
+                if (!$skipSignatureValidation && $this->isSignatureEnabled()) {
+                    $this->validateSignature($imagePath, $params);
+                    // If signature is validated, allow prompts (signature provides security)
+                    $allowPrompt = true;
+                } elseif ($skipSignatureValidation) {
+                    // Base64 URLs already validated signature, allow prompts
+                    $allowPrompt = true;
+                } else {
+                    // If signature validation is disabled, allow prompts without admin login
+                    // Otherwise, check if user is admin
+                    $signatureEnabled = $this->isSignatureEnabled();
+                    if (!$signatureEnabled) {
+                        $allowPrompt = true; // Signature disabled = allow prompts
+                    } else {
+                        $allowPrompt = $this->isAdmin(); // Signature enabled but not provided = require admin
+                    }
+                }
+            } catch (\Exception $e) {
+                // Store not found or other config errors - check if signature is disabled
+                if (strpos($e->getMessage(), 'store') !== false || strpos($e->getMessage(), 'Store') !== false) {
+                    $this->logger->warning('Store/config error, skipping signature validation: ' . $e->getMessage());
+                    // If signature validation is disabled, allow prompts even on config errors
+                    try {
+                        if (!$this->isSignatureEnabled()) {
+                            $allowPrompt = true;
+                        }
+                    } catch (\Exception $e2) {
+                        // Ignore errors checking signature status
+                    }
+                }
             }
 
             // Acquire lock for this image resize operation to prevent race conditions
             $lockAcquired = false;
-            if ($this->lockManager->isAvailable()) {
-                $lockAcquired = $this->lockManager->acquireLock($imagePath, $params);
-                
-                // If lock cannot be acquired after retries, return original image
-                if (!$lockAcquired) {
-                    return $this->returnOriginalImage($imagePath);
+            try {
+                if ($this->lockManager->isAvailable()) {
+                    $lockAcquired = $this->lockManager->acquireLock($imagePath, $params);
+                    
+                    // If lock cannot be acquired after retries, return original image
+                    if (!$lockAcquired) {
+                        return $this->returnOriginalImage($imagePath);
+                    }
                 }
+            } catch (\Exception $e) {
+                // Lock manager errors - continue without lock
+                $this->logger->warning('Lock manager error: ' . $e->getMessage());
             }
 
             try {
                 // Resize image
                 $result = $this->imageResizeService->resizeImage($imagePath, $params, $allowPrompt);
+            } catch (\Exception $e) {
+                // If resize fails due to store/config errors, try to return original image
+                if (stripos($e->getMessage(), 'store') !== false) {
+                    $this->logger->warning('Store error during resize, attempting to return original: ' . $e->getMessage());
+                    try {
+                        return $this->returnOriginalImage($imagePath);
+                    } catch (\Exception $e2) {
+                        // If returning original also fails, re-throw original exception
+                        throw $e;
+                    }
+                }
+                throw $e;
             } finally {
                 // Always release lock if acquired
                 if ($lockAcquired) {
-                    $this->lockManager->releaseLock($imagePath, $params);
+                    try {
+                        $this->lockManager->releaseLock($imagePath, $params);
+                    } catch (\Exception $e) {
+                        // Ignore lock release errors
+                    }
                 }
             }
             
@@ -221,13 +443,31 @@ class Index extends Action
             $resultRaw->setHeader('X-Generation-Duration', (string)$durationMs . 'ms');
             $resultRaw->setHeader('Cache-Control', 'public, max-age=31536000');
             
-            $fileContent = file_get_contents($result->getFilePath());
+            $filePath = $result->getFilePath();
+            // Verify file exists and is not a directory
+            if (!file_exists($filePath) || is_dir($filePath)) {
+                throw new NotFoundException(__('Resized image file not found: %1', $filePath));
+            }
+            $fileContent = file_get_contents($filePath);
+            if ($fileContent === false) {
+                throw new NotFoundException(__('Failed to read resized image file: %1', $filePath));
+            }
             $resultRaw->setContents($fileContent);
 
             return $resultRaw;
         } catch (\Exception $e) {
-            $this->logger->error('Image resize error: ' . $e->getMessage());
-            throw new NotFoundException(__('Image not found or could not be processed'));
+            $errorDetails = [
+                'exception' => get_class($e),
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ];
+            if ($e->getPrevious()) {
+                $errorDetails['previous'] = $e->getPrevious()->getMessage();
+            }
+            $this->logger->error('Image resize error: ' . $e->getMessage(), $errorDetails);
+            // Include original message in the exception for debugging
+            throw new NotFoundException(__('Image not found or could not be processed: %1', $e->getMessage()));
         }
     }
 
@@ -238,10 +478,22 @@ class Index extends Action
      */
     private function isSignatureEnabled(): bool
     {
-        return (bool)$this->scopeConfig->getValue(
-            'genaker_imageaibundle/general/signature_enabled',
-            \Magento\Store\Model\ScopeInterface::SCOPE_STORE
-        );
+        try {
+            return (bool)$this->scopeConfig->getValue(
+                'genaker_imageaibundle/general/signature_enabled',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE
+            );
+        } catch (\Exception $e) {
+            // Store not found or other errors, use default scope or return false
+            try {
+                return (bool)$this->scopeConfig->getValue(
+                    'genaker_imageaibundle/general/signature_enabled',
+                    \Magento\Store\Model\ScopeInterface::SCOPE_DEFAULT
+                );
+            } catch (\Exception $e2) {
+                return false; // Default to disabled if config unavailable
+            }
+        }
     }
 
     /**
@@ -259,10 +511,22 @@ class Index extends Action
             throw new \Magento\Framework\Exception\SecurityException(__('Missing signature parameter'));
         }
 
-        $salt = $this->scopeConfig->getValue(
-            'genaker_imageaibundle/general/signature_salt',
-            \Magento\Store\Model\ScopeInterface::SCOPE_STORE
-        );
+        try {
+            $salt = $this->scopeConfig->getValue(
+                'genaker_imageaibundle/general/signature_salt',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE
+            );
+        } catch (\Exception $e) {
+            // Store not found or other errors, use default scope
+            try {
+                $salt = $this->scopeConfig->getValue(
+                    'genaker_imageaibundle/general/signature_salt',
+                    \Magento\Store\Model\ScopeInterface::SCOPE_DEFAULT
+                );
+            } catch (\Exception $e2) {
+                $salt = ''; // Default to empty salt if config unavailable
+            }
+        }
 
         $expectedSignature = $this->generateSignature($imagePath, $params, $salt);
         if (!hash_equals($expectedSignature, $providedSignature)) {
@@ -312,11 +576,22 @@ class Index extends Action
      */
     private function isRegularUrlEnabled(): bool
     {
-        return (bool)$this->scopeConfig->getValue(
-            'genaker_imageaibundle/general/regular_url_enabled',
-            \Magento\Store\Model\ScopeInterface::SCOPE_STORE,
-            true // Default to enabled
-        );
+        try {
+            return (bool)$this->scopeConfig->getValue(
+                'genaker_imageaibundle/general/regular_url_enabled',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE
+            );
+        } catch (\Exception $e) {
+            // Store not found or other errors, use default scope or return default value
+            try {
+                return (bool)$this->scopeConfig->getValue(
+                    'genaker_imageaibundle/general/regular_url_enabled',
+                    \Magento\Store\Model\ScopeInterface::SCOPE_DEFAULT
+                );
+            } catch (\Exception $e2) {
+                return true; // Default to enabled
+            }
+        }
     }
 
     /**
@@ -326,10 +601,22 @@ class Index extends Action
      */
     private function getSignatureSalt(): string
     {
-        $salt = $this->scopeConfig->getValue(
-            'genaker_imageaibundle/general/signature_salt',
-            \Magento\Store\Model\ScopeInterface::SCOPE_STORE
-        );
+        try {
+            $salt = $this->scopeConfig->getValue(
+                'genaker_imageaibundle/general/signature_salt',
+                \Magento\Store\Model\ScopeInterface::SCOPE_STORE
+            );
+        } catch (\Exception $e) {
+            // Store not found or other errors, use default scope
+            try {
+                $salt = $this->scopeConfig->getValue(
+                    'genaker_imageaibundle/general/signature_salt',
+                    \Magento\Store\Model\ScopeInterface::SCOPE_DEFAULT
+                );
+            } catch (\Exception $e2) {
+                $salt = ''; // Default to empty salt if config unavailable
+            }
+        }
 
         // Decrypt if encrypted
         if ($salt && class_exists('\Magento\Framework\Encryption\EncryptorInterface')) {
@@ -351,6 +638,40 @@ class Index extends Action
     {
         // Check if it contains at least one key=value pair
         return preg_match('/^[a-zA-Z0-9_\.\[\]-]+=[^&]*(&[a-zA-Z0-9_\.\[\]-]+=[^&]*)*$/', $string) === 1;
+    }
+
+    /**
+     * Return video content directly with proper headers
+     *
+     * @param string $videoPath Full path to video file
+     * @return Raw
+     * @throws NotFoundException
+     */
+    private function returnVideoContent(string $videoPath): Raw
+    {
+        // Validate video file exists and is readable
+        if (!file_exists($videoPath) || !is_readable($videoPath)) {
+            throw new NotFoundException(__('Video file not found: %1', $videoPath));
+        }
+
+        // Read video content
+        $videoContent = file_get_contents($videoPath);
+        if ($videoContent === false) {
+            throw new NotFoundException(__('Failed to read video file: %1', $videoPath));
+        }
+
+        // Create response with video content
+        /** @var Raw $resultRaw */
+        $resultRaw = $this->resultFactory->create(ResultFactory::TYPE_RAW);
+        $resultRaw->setHeader('Content-Type', 'video/mp4');
+        $resultRaw->setHeader('Content-Length', (string)strlen($videoContent));
+        $resultRaw->setHeader('Accept-Ranges', 'bytes');
+        $resultRaw->setHeader('Cache-Control', 'public, max-age=31536000');
+        $resultRaw->setHeader('X-Content-Type-Options', 'nosniff');
+        
+        $resultRaw->setContents($videoContent);
+
+        return $resultRaw;
     }
 
     /**

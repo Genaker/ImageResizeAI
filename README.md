@@ -9,6 +9,7 @@ Magento 2 module for intelligent image resizing with caching and AI-powered imag
 - **Intelligent Caching**: Automatic caching of resized images for optimal performance
 - **Signature Validation**: Optional signature-based URL validation for security
 - **AI-Powered Enhancement**: Integration with Google Gemini API for AI image modification (optional)
+- **AI Video Generation**: Generate videos from images using Google Veo 3.1 API (optional)
 - **Admin Panel**: Admin interface for generating resize URLs with signatures
 - **Configurable Limits**: System configuration for width, height, quality limits
 - **Performance Optimized**: Efficient caching and file management
@@ -24,6 +25,8 @@ bin/magento setup:upgrade
 bin/magento cache:flush
 ```
 
+**Note:** During installation, a test image (`wt09-white_main_1.jpg`) will be automatically copied to `/pub/media/catalog/product/w/t/` for testing purposes. You can use this image to test all resize functionality.
+
 ### Manual Installation
 
 1. Copy the module to `app/code/Genaker/ImageAIBundle`
@@ -33,6 +36,8 @@ bin/magento module:enable Genaker_ImageAIBundle
 bin/magento setup:upgrade
 bin/magento cache:flush
 ```
+
+**Note:** The test image will be automatically installed to `/pub/media/catalog/product/w/t/wt09-white_main_1.jpg` during `setup:upgrade`.
 
 ## Configuration
 
@@ -59,20 +64,153 @@ Navigate to **Stores > Configuration > Genaker > Image AI Resize** to configure:
 
 ### Frontend URL Format
 
-#### Basic Resize
+#### Basic Resize (Short Format - Recommended)
 ```
-/media/resize/index/imagePath/{image_path}?w={width}&h={height}&f={format}&q={quality}
+/resize/ip/{image_path}?w={width}&h={height}&f={format}&q={quality}
 ```
 
 **Example:**
 ```
-/media/resize/index/imagePath/catalog/product/image.jpg?w=300&h=300&f=webp&q=85
+/resize/ip/catalog/product/image.jpg?w=300&h=300&f=webp&q=85
+```
+
+#### Legacy Format (Still Supported)
+```
+/resize/index/imagePath/{image_path}?w={width}&h={height}&f={format}&q={quality}
+```
+
+**Example:**
+```
+/resize/index/imagePath/catalog/product/image.jpg?w=300&h=300&f=webp&q=85
 ```
 
 #### With Signature (if enabled)
 ```
-/media/resize/index/imagePath/{image_path}?w={width}&h={height}&f={format}&sig={signature}
+/resize/ip/{image_path}?w={width}&h={height}&f={format}&sig={signature}
 ```
+
+### Manual Browser Testing
+
+You can test the image resize functionality directly in your browser by constructing URLs with the appropriate parameters.
+
+#### URL Structure
+
+The base URL format (short format - recommended):
+```
+https://your-domain.com/resize/ip/{image_path}?{parameters}
+```
+
+Legacy format (still supported for backward compatibility):
+```
+https://your-domain.com/resize/index/imagePath/{image_path}?{parameters}
+```
+
+**Note:** The short format (`/resize/ip/...`) is recommended as it's cleaner and shorter. The legacy format (`/resize/index/imagePath/...`) is still supported for backward compatibility.
+
+#### Constructing Test URLs
+
+**1. Basic Image Resize (Width & Height)**
+
+Using the test image included with the module (short format):
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=jpeg
+```
+
+**2. Resize with Quality Control**
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=500&h=500&f=webp&q=90
+```
+
+**3. Width Only (Height auto-scales)**
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=400&f=jpeg
+```
+
+**4. Height Only (Width auto-scales)**
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?h=400&f=jpeg
+```
+
+**5. Format Conversion (JPEG to WebP)**
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=webp&q=85
+```
+
+**6. Format Conversion (JPEG to PNG)**
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=png&q=90
+```
+
+**7. With Signature (if signature validation is enabled)**
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=webp&sig={generated_signature}
+```
+
+**8. Testing Gemini AI Integration (Admin Only)**
+
+To test AI-powered image modification, you need to:
+- Be logged in as admin
+- Have `GEMINI_API_KEY` environment variable set or configured in admin panel
+- Use the `prompt` parameter
+
+```
+https://your-domain.com/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=jpeg&prompt=Make%20this%20image%20brighter%20and%20more%20vibrant
+```
+
+**Note:** The module includes a test image (`wt09-white_main_1.jpg`) that is automatically copied to `/pub/media/catalog/product/w/t/` during installation. You can use this image for testing all resize functionality.
+
+**Note:** The `prompt` parameter is only available for admin users or when signature validation is enabled (signature provides security).
+
+#### URL Parameter Encoding
+
+When constructing URLs manually, ensure proper URL encoding:
+
+- **Spaces** should be encoded as `%20` or `+`
+- **Special characters** in image paths should be URL encoded
+- **Example with encoded path:**
+```
+https://your-domain.com/resize/ip/catalog/product/image%20with%20spaces.jpg?w=300&h=300&f=jpeg
+```
+
+#### Testing Checklist
+
+1. **Basic Resize**: Test with width and height parameters
+2. **Format Conversion**: Test converting between JPEG, PNG, WebP, GIF
+3. **Quality Control**: Test different quality values (1-100)
+4. **Caching**: Request the same URL twice - second request should be faster (cache hit)
+5. **Error Handling**: Test with invalid parameters or non-existent images
+6. **Gemini AI**: Test AI modification with appropriate prompts (admin only)
+
+#### Example Test Scenarios
+
+**Scenario 1: Resize Product Image**
+```
+Original: /media/catalog/product/example.jpg (1200x800)
+Resized: https://your-domain.com/resize/ip/catalog/product/example.jpg?w=300&h=200&f=webp&q=85
+Result: 300x200 WebP image
+```
+
+**Scenario 2: Create Thumbnail**
+```
+Original: /media/catalog/product/large-image.jpg
+Thumbnail: https://your-domain.com/resize/ip/catalog/product/large-image.jpg?w=150&h=150&f=jpeg&q=80
+Result: 150x150 JPEG thumbnail
+```
+
+**Scenario 3: Optimize for Web**
+```
+Original: /media/catalog/product/heavy-image.png
+Optimized: https://your-domain.com/resize/ip/catalog/product/heavy-image.png?w=800&f=webp&q=90
+Result: WebP format with max width 800px, auto height
+```
+
+#### Troubleshooting Browser Testing
+
+- **404 Error**: Check that the image path is correct and the image exists in `/pub/media/`
+- **403 Error**: Check signature if signature validation is enabled
+- **500 Error**: Check Magento logs (`var/log/system.log`) for detailed error messages
+- **Image Not Loading**: Verify format parameter (`f`) is provided and valid
+- **Slow Response**: First request creates cache, subsequent requests should be faster
 
 ### URL Parameters
 
@@ -85,8 +223,180 @@ Navigate to **Stores > Configuration > Genaker > Image AI Resize** to configure:
 | `a` | Aspect ratio (inset, outbound) | No | `inset` |
 | `sig` | Signature (if validation enabled) | Yes* | `abc123...` |
 | `prompt` | AI modification prompt (admin only) | No | `enhance colors` |
+| `video` | Enable video generation (Veo 3.1) | No | `true` |
+| `aspectRatio` | Video aspect ratio (16:9, 9:16, 1:1) | No | `16:9` |
+| `poll` | Wait for video completion (synchronous) | No | `true` |
+| `operation` | Operation ID for polling video status | No | `operations/...` |
+| `silentVideo` | Generate silent video (no audio) to avoid audio-related safety filters | No | `true` |
+| `return` | Return format: `video` to return video content directly instead of JSON | No | `video` |
 
 \* Required only if signature validation is enabled
+
+## Video Generation Examples
+
+Video generation uses the same URL structure as image resizing, but with the `video=true` parameter. The endpoint returns JSON responses instead of image files.
+
+**Base URL Format**:
+```
+https://your-domain.com/media/resize/ip/{image_path}?video=true&prompt={prompt}&{other_parameters}
+```
+
+### Basic Video Generation (Async Mode)
+
+**Start video generation** (returns operation ID for polling):
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=make%20it%20summer&aspectRatio=16:9
+```
+
+**Response (JSON)**:
+```json
+{
+  "success": true,
+  "status": "processing",
+  "operationName": "operations/abc123...",
+  "message": "Video generation started. Poll with ?operation=operations/abc123...&poll=true"
+}
+```
+
+**Poll for completion**:
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?operation=operations/abc123...&poll=true
+```
+
+### Synchronous Video Generation
+
+**Wait for video completion** (may take 30-60 seconds):
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=make%20it%20summer&poll=true
+```
+
+**Response (JSON)**:
+```json
+{
+  "success": true,
+  "status": "completed",
+  "videoUrl": "https://your-domain.com/media/video/veo_abc123.mp4",
+  "embedUrl": "<video controls width=\"100%\" height=\"auto\"><source src=\"...\" type=\"video/mp4\">Your browser does not support the video tag.</video>",
+  "videoPath": "/var/www/html/pub/media/video/veo_abc123.mp4",
+  "cached": true
+}
+```
+
+### Video Generation with Different Aspect Ratios
+
+**16:9 (Landscape)**:
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=create%20a%20summer%20scene&aspectRatio=16:9
+```
+
+**9:16 (Portrait)**:
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=create%20a%20summer%20scene&aspectRatio=9:16
+```
+
+**1:1 (Square)**:
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=create%20a%20summer%20scene&aspectRatio=1:1
+```
+
+### Video Generation Examples
+
+**Example 1: Transform Product Image to Summer Scene**
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=Transform%20this%20product%20into%20a%20summer%20beach%20scene%20with%20sunset&aspectRatio=16:9&poll=true
+```
+
+**Example 2: Create Animated Product Showcase**
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=Create%20an%20animated%20showcase%20of%20this%20product%20rotating%20slowly&aspectRatio=16:9
+```
+
+**Example 3: Generate Silent Video (No Audio)**
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=make%20it%20summer&silentVideo=true&poll=true
+```
+
+**Example 4: Return Video Content Directly (Not JSON)**
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=make%20it%20summer&poll=true&return=video
+```
+
+This returns the actual video file content (MP4) that browsers can play directly, instead of JSON response.
+
+**Example 5: Video Caching**
+Videos are automatically cached based on image path, prompt, and aspect ratio. Same parameters = same cached video:
+```
+# First request - generates and caches video
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=make%20it%20summer&poll=true
+
+# Second request with same parameters - returns cached video immediately
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?video=true&prompt=make%20it%20summer&poll=true
+```
+
+### Video Generation Notes
+
+- **Async Mode**: Use without `poll=true` to get operation ID immediately (recommended for production)
+- **Sync Mode**: Use `poll=true` to wait for completion (may take 30-90 seconds, timeout: 5 minutes)
+- **Aspect Ratios**: Supported values are `16:9`, `9:16`, and `1:1` (default: `16:9`)
+- **Caching**: Videos are **always cached** locally to `pub/media/video/` directory. Cache key is based on image path, prompt, and aspect ratio
+- **Silent Video**: Use `silentVideo=true` to generate videos without audio (helps avoid audio-related safety filters)
+- **Return Format**: Use `return=video` to return video content directly instead of JSON (useful for direct video playback)
+- **Security**: Same admin/signature requirements as image modification
+- **Video Storage**: All videos are saved to `pub/media/video/` with filename format: `veo_{md5_hash}.mp4`
+- **Implementation**: Uses direct HTTP calls to Gemini v1beta API (default implementation)
+  - **Direct API Calls**: The module uses native PHP cURL to make direct requests to `https://generativelanguage.googleapis.com/v1beta` endpoint
+  - **No SDK Required**: Works without waiting for Gemini SDK updates - uses direct HTTP implementation by default
+  - **Veo 3.1 Support**: Directly calls `veo-3.1-generate-preview:predictLongRunning` endpoint
+  - **Redirect Handling**: Automatically follows 302 redirects from Google Files API to download videos
+  - **Reliable**: Bypasses SDK limitations and works immediately with any valid API key
+  - **API Documentation**: https://ai.google.dev/gemini-api/docs/models/veo
+
+### Troubleshooting Video Generation
+
+**Error: "Video generation service is not available"**
+- Check that `GEMINI_API_KEY` environment variable is set or configured in admin panel
+- Verify the API key is valid and has access to Veo 3.1 models
+- Ensure the API key has proper permissions for Veo 3.1 API access
+
+**Error: "Gemini API error (403)"**
+- Your API key may not have access to Veo 3.1 models
+- Check your Google Cloud Console API permissions
+- Ensure Veo 3.1 API is enabled for your project
+
+**Error: "Video generation timeout"**
+- Video generation typically takes 30-90 seconds (can take up to 5 minutes)
+- Default timeout is 300 seconds (5 minutes)
+- Use async mode (`poll=false`) for production to avoid timeouts
+- Check network connectivity to Google APIs
+- Ensure PHP `max_execution_time` is greater than polling timeout (default 300s)
+
+**Error: "Video generation was blocked by safety filters"**
+- Google's safety filters detected potentially restricted content
+- **Solutions**:
+  1. Simplify your prompt (remove brand names, celebrities, copyrighted content)
+  2. Use `silentVideo=true` parameter if audio is the issue
+  3. Check that your image doesn't contain restricted content
+  4. Try a different prompt or image
+- You are not charged for blocked attempts
+
+**Error: "Video generation error (Code: 13)"**
+- This is an internal server error from Gemini API (usually temporary)
+- The operation has failed and cannot be retried
+- **Solution**: Start a new video generation request with the same parameters
+- Wait a few minutes if it's a temporary server issue
+- Check Gemini API status if problem persists
+
+**Error: "Failed to download video from URI (Status: 302)"**
+- This error has been fixed - the module now automatically follows redirects
+- If you still see this error, check logs for details
+- Videos are downloaded using native PHP cURL with redirect following enabled
+
+**Error: "No video found in API response"**
+- Check Magento logs for full API response structure
+- May indicate API response format has changed
+- Verify API key has proper Veo 3.1 access
+
+**Note**: The module uses direct HTTP calls to Gemini API, so no SDK updates are required. Video generation works as long as your API key has Veo 3.1 access.
 
 ### Admin URL Generator
 
@@ -132,19 +442,40 @@ class YourClass
 
 ## Cache Management
 
+### Image Cache
+
 Resized images are automatically cached in `/pub/media/cache/resize/` directory. The cache structure follows the image path structure for easy management.
 
-### Clearing Cache
-
-To clear all resized image cache:
+**Clearing Image Cache:**
 ```bash
 rm -rf pub/media/cache/resize/*
 ```
 
-Or use Magento cache management:
+### Video Cache
+
+Generated videos are automatically cached in `/pub/media/video/` directory. Videos are cached based on:
+- Image path
+- Prompt text
+- Aspect ratio
+
+Cache key format: `md5(imagePath|prompt|aspectRatio)`
+
+**Video Cache Behavior:**
+- **Always Enabled**: Videos are always saved locally (no configuration needed)
+- **Automatic**: Same image + prompt + aspect ratio = same cached video
+- **Immediate Return**: Cached videos are returned immediately without API calls
+
+**Clearing Video Cache:**
+```bash
+rm -rf pub/media/video/*
+```
+
+**Or use Magento cache management:**
 ```bash
 bin/magento cache:clean
 ```
+
+**Note**: Video cache is separate from image cache and is always enabled for optimal performance.
 
 ## Security
 
@@ -178,6 +509,215 @@ Where:
 - **Extensions**: GD or Imagick (for image processing)
 - **Optional**: Google Gemini API key (for AI features)
 
+## How Media App Interceptor Works
+
+The module uses a Magento plugin to intercept requests to the Media Storage app and route resize requests to the standard HTTP app instead. This allows the module to handle `/media/resize/ip/` URLs without modifying core Magento files.
+
+### Request Flow
+
+1. **Request Arrives**: A request comes to `/media/resize/ip/catalog/product/image.jpg?w=300&h=300`
+   
+2. **Web Server Routing**: The web server routes `/media/*` requests to `pub/get.php` (configured in `.magento.app.yaml`)
+
+3. **Media App Created**: `pub/get.php` creates a `Magento\MediaStorage\App\Media` application instance
+
+4. **Plugin Intercepts**: The `MediaPlugin::aroundLaunch()` method intercepts the `Media::launch()` call before it executes
+
+5. **Path Detection**: The plugin checks if the request is a resize path:
+   - Extracts `relativeFileName` from the Media app (e.g., `resize/ip/catalog/product/image.jpg`)
+   - Checks if path starts with `resize/ip/`
+
+6. **Request Transformation**: If it's a resize path, the plugin:
+   - Extracts the image path (everything after `resize/ip/`)
+   - Modifies `$_SERVER` variables:
+     - `REQUEST_URI`: `/media/resize/ip?ip=catalog/product/image.jpg&w=300&h=300`
+     - `PATH_INFO`: `/media/resize/ip`
+     - `QUERY_STRING`: `ip=catalog/product/image.jpg&w=300&h=300`
+   - Sets `$_GET['ip']` parameter
+
+7. **HTTP App Bootstrap**: The plugin creates a new `Magento\Framework\App\Http` application and runs it:
+   ```php
+   $bootstrap = Bootstrap::create(BP, $_SERVER);
+   $app = $bootstrap->createApplication(Http::class);
+   return $bootstrap->run($app);
+   ```
+
+8. **Standard Routing**: The HTTP app routes `/media/resize/ip` to `Genaker\ImageAIBundle\Controller\Resize\Ip` controller via `routes.xml`
+
+9. **Controller Processing**: The controller processes the resize request and returns the resized image
+
+### Plugin Configuration
+
+The plugin is registered in `etc/di.xml`:
+
+```xml
+<type name="Magento\MediaStorage\App\Media">
+    <plugin name="genaker_imageaibundle_media_plugin" 
+            type="Genaker\ImageAIBundle\Plugin\MediaStorage\App\MediaPlugin" 
+            sortOrder="1"/>
+</type>
+```
+
+### Why This Approach?
+
+- **No Core Modifications**: Doesn't require modifying `pub/get.php` or other core files
+- **Clean Separation**: Uses Magento's plugin system for clean interception
+- **Maintainable**: Easy to update and maintain without affecting core functionality
+- **Compatible**: Works with all Magento versions that support plugins
+
+### Handling Recursive Calls
+
+The plugin includes logic to prevent infinite loops:
+- Checks if `relativePath` is `media/resize/ip` and `ip` parameter exists (second call)
+- Routes directly to HTTP app without further processing
+- Prevents the Media app from processing the transformed request
+
+## Testing AI Functionality
+
+The module integrates with Google Gemini API for AI-powered image modification. Here's how to test it:
+
+### Prerequisites
+
+1. **Set Gemini API Key**: 
+   - Set environment variable: `export GEMINI_API_KEY=your_api_key_here`
+   - Or configure in admin: **Stores > Configuration > Genaker > Image AI Resize > Gemini API Key**
+
+2. **Admin Access Required**: 
+   - AI prompts are only available for admin users (logged in to admin panel)
+   - Or when signature validation is enabled (signature provides security)
+
+### Testing via Browser
+
+**1. Basic AI Enhancement**
+
+As an admin user, use the `prompt` parameter:
+
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=jpeg&prompt=Make%20this%20image%20brighter%20and%20more%20vibrant
+```
+
+**2. Color Enhancement**
+
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=400&h=400&f=jpeg&prompt=Enhance%20colors%20and%20increase%20saturation
+```
+
+**3. Style Modification**
+
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=500&h=500&f=jpeg&prompt=Apply%20a%20vintage%20filter%20with%20warm%20tones
+```
+
+**4. Background Removal**
+
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=png&prompt=Remove%20background%20and%20make%20it%20transparent
+```
+
+**5. Object Enhancement**
+
+```
+https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=600&h=600&f=jpeg&prompt=Sharpen%20the%20product%20and%20improve%20details
+```
+
+### Testing via cURL
+
+**1. Basic Test (Admin Session Required)**
+
+```bash
+# First, get admin session cookie
+curl -c cookies.txt -b cookies.txt \
+  "https://your-domain.com/admin" \
+  --data "login[username]=admin&login[password]=password"
+
+# Then test AI modification
+curl -b cookies.txt \
+  "https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=jpeg&prompt=Enhance%20colors" \
+  --output enhanced_image.jpg
+```
+
+**2. With Signature (No Admin Required)**
+
+If signature validation is enabled, you can use AI prompts without admin access:
+
+```bash
+# Generate signature first (see Signature Validation section)
+# Then use in URL:
+curl "https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jpg?w=300&h=300&f=jpeg&prompt=Enhance%20colors&sig=your_signature" \
+  --output enhanced_image.jpg
+```
+
+### Testing via Integration Test
+
+Run the integration test suite:
+
+```bash
+vendor/bin/phpunit vendor/genaker/imageaibundle/app/code/Genaker/ImageAIBundle/Test/Integration/Controller/Resize/IpCurlTest.php
+```
+
+### Expected Behavior
+
+**Successful AI Modification:**
+- Returns modified image with applied changes
+- Image format matches requested format (`f` parameter)
+- Image dimensions match requested dimensions (`w`, `h` parameters)
+- Response time may be slower due to API call (first request)
+- Subsequent requests use cache (faster)
+
+**Error Cases:**
+- **401/403**: Admin access required or signature validation failed
+- **400**: Invalid prompt or API key not configured
+- **500**: Gemini API error (check logs for details)
+
+### AI Prompt Guidelines
+
+**Effective Prompts:**
+- ✅ "Make this image brighter and more vibrant"
+- ✅ "Enhance colors and increase saturation"
+- ✅ "Apply vintage filter with warm tones"
+- ✅ "Remove background and make it transparent"
+- ✅ "Sharpen the product and improve details"
+- ✅ "Increase contrast and brightness"
+
+**Ineffective Prompts:**
+- ❌ "Make it better" (too vague)
+- ❌ "Change everything" (not specific)
+- ❌ Very long prompts (may exceed API limits)
+
+### Troubleshooting AI Testing
+
+**1. API Key Not Working**
+- Verify `GEMINI_API_KEY` environment variable is set: `echo $GEMINI_API_KEY`
+- Check admin configuration: **Stores > Configuration > Genaker > Image AI Resize**
+- Verify API key is valid and has proper permissions
+
+**2. Admin Access Required Error**
+- Ensure you're logged in to admin panel
+- Or enable signature validation and use signed URLs
+
+**3. API Errors**
+- Check Magento logs: `var/log/system.log`
+- Look for Gemini API error messages
+- Verify API quota and rate limits
+
+**4. No Changes Applied**
+- Check if prompt is being processed (look for API calls in logs)
+- Verify image format supports modifications (some formats may not work well)
+- Try simpler prompts first
+
+**5. Slow Response Times**
+- First request calls Gemini API (slower)
+- Subsequent requests use cache (faster)
+- Consider caching AI-modified images for production
+
+### AI Modification Limitations
+
+- **Format Support**: Works best with JPEG and PNG formats
+- **Size Limits**: Very large images may fail (API limits)
+- **Processing Time**: First request takes longer due to API call
+- **Cost**: Each AI modification uses API quota
+- **Quality**: Results depend on prompt clarity and image quality
+
 ## Troubleshooting
 
 ### Images Not Resizing
@@ -198,6 +738,14 @@ Where:
 1. Verify directory permissions: `chmod -R 755 pub/media/cache/`
 2. Check disk space availability
 3. Verify Magento cache is enabled
+
+### Media App Interceptor Not Working
+
+1. Verify plugin is registered: Check `etc/di.xml` for plugin configuration
+2. Clear generated code: `bin/magento setup:di:compile`
+3. Check plugin is being called: Add logging to `MediaPlugin::aroundLaunch()`
+4. Verify route configuration: Check `etc/frontend/routes.xml` has `frontName="media"`
+5. Check Magento logs for plugin errors
 
 ## Development
 
@@ -239,6 +787,17 @@ For issues, questions, or contributions, please visit: https://github.com/Genake
 
 ## Changelog
 
+### Version 1.1.0
+- **Video Generation**: Added Google Veo 3.1 API integration for AI-powered video generation from images
+- **Video Caching**: Automatic caching of generated videos based on image path, prompt, and aspect ratio
+- **Silent Video**: Added `silentVideo=true` parameter to generate videos without audio (avoids audio-related safety filters)
+- **Direct Video Return**: Added `return=video` parameter to return video content directly instead of JSON
+- **Safety Filter Handling**: Improved error messages for Google's safety filter blocks with actionable suggestions
+- **Redirect Handling**: Automatic handling of 302 redirects from Google Files API for video downloads
+- **Error Handling**: Enhanced error handling with detailed error codes and troubleshooting guidance
+- **Video Storage**: Videos saved to `pub/media/video/` directory (always enabled)
+- **URL Format**: Fixed video URLs to exclude store code segment (`/default/`)
+
 ### Version 1.0.0
 - Initial release
 - Basic image resizing functionality
@@ -246,3 +805,4 @@ For issues, questions, or contributions, please visit: https://github.com/Genake
 - Admin URL generator
 - Multiple format support
 - Caching system
+- Gemini AI image modification support

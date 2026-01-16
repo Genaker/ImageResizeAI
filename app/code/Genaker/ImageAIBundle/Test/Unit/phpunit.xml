@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:phpunit:phpunit/phpunit.xsd"
+         bootstrap="../../../../../../../../../../dev/tests/unit/framework/bootstrap.php"
+         colors="true"
+         verbose="true">
+    <testsuite name="Genaker ImageAIBundle Unit Tests">
+        <directory>.</directory>
+    </testsuite>
+    <filter>
+        <whitelist>
+            <directory suffix=".php">../../</directory>
+            <exclude>
+                <directory>../../Test</directory>
+            </exclude>
+        </whitelist>
+    </filter>
+</phpunit>
