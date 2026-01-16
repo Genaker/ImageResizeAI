@@ -10,6 +10,8 @@ Magento 2 module for intelligent image resizing with caching and AI-powered imag
 - **Signature Validation**: Optional signature-based URL validation for security
 - **AI-Powered Enhancement**: Integration with Google Gemini API for AI image modification (optional)
 - **AI Video Generation**: Generate videos from images using Google Veo 3.1 API (optional)
+- **Python Implementation**: Standalone Python script for video generation with enhanced performance and reliability
+- **Magento CLI Commands**: Console commands for video generation (`agento:video` PHP, `agento-p:video` Python proxy)
 - **Admin Panel**: Admin interface for generating resize URLs with signatures
 - **Configurable Limits**: System configuration for width, height, quality limits
 - **Performance Optimized**: Efficient caching and file management
@@ -399,6 +401,189 @@ https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jp
 **Note**: The module uses direct HTTP calls to Gemini API, so no SDK updates are required. Video generation works as long as your API key has Veo 3.1 access.
 
 ### Admin URL Generator
+## Python Implementation for Video Generation
+
+The module includes a Python-based alternative implementation for video generation that offers enhanced performance, better error handling, and improved reliability for production environments.
+
+### Overview
+
+The Python implementation (`pygento/agento_video.py`) provides a standalone script that can be used independently or via Magento CLI proxy command (`agento-p:video`). It uses Google's Generative AI SDK and Python's `requests` library for robust API interactions.
+
+### Benefits of Python Implementation
+
+1. **Better Performance**: Python's `requests` library handles large binary streams (video files) more efficiently than PHP cURL for long-running downloads
+2. **Automatic Redirect Handling**: Python's `requests` library automatically follows HTTP redirects (302), eliminating the need for manual redirect configuration
+3. **Decoupled Processing**: Can run as a standalone background worker without taxing PHP-FPM processes
+4. **Better Error Handling**: More detailed error messages and safety filter detection
+5. **Multiple Image Processing**: Process multiple images with the same prompt in a single command
+6. **Robust MIME Detection**: Uses Python's built-in `mimetypes` library for accurate MIME type detection
+7. **Scalability**: Can be easily wrapped in a Docker container or deployed as a separate microservice
+8. **Cross-Platform**: Works on Linux, macOS, and Windows with Python 3.7+
+
+### Installation
+
+Install Python dependencies:
+
+```bash
+cd vendor/genaker/imageaibundle/pygento
+pip install -r requirements.txt
+```
+
+Or install manually:
+
+```bash
+pip install google-generativeai requests
+```
+
+### Usage via Magento CLI (Recommended)
+
+The easiest way to use the Python implementation is through the Magento CLI proxy command:
+
+#### Basic Usage
+
+```bash
+php bin/magento agento-p:video --image-path "catalog/product/image.jpg" --prompt "Product showcase"
+```
+
+#### Multiple Images
+
+```bash
+php bin/magento agento-p:video \
+  --image-path "catalog/product/image1.jpg" "catalog/product/image2.jpg" \
+  --prompt "Beautiful product animation" \
+  --poll
+```
+
+#### With All Options
+
+```bash
+php bin/magento agento-p:video \
+  --image-path "catalog/product/image.jpg" \
+  --prompt "Create a summer scene" \
+  --aspect-ratio "16:9" \
+  --silent-video \
+  --poll \
+  --api-key "YOUR_API_KEY"
+```
+
+**Note**: The `--base-url` parameter is automatically retrieved from Magento's store configuration, so you don't need to specify it manually.
+
+### Usage as Standalone Python Script
+
+You can also run the Python script directly:
+
+```bash
+python3 vendor/genaker/imageaibundle/pygento/agento_video.py \
+  --base-path /var/www/html \
+  --base-url https://your-domain.com \
+  -ip "catalog/product/image.jpg" \
+  -p "Product showcase" \
+  --poll
+```
+
+### Command Options
+
+| Option | Description | Required |
+|--------|-------------|----------|
+| `--image-path` or `-ip` | Path(s) to source image(s) (can specify multiple) | Yes |
+| `--prompt` or `-p` | Video generation prompt | Yes |
+| `--aspect-ratio` or `-ar` | Aspect ratio (16:9, 9:16, 1:1) | No (default: 16:9) |
+| `--silent-video` or `-sv` | Generate silent video (avoids audio safety filters) | No |
+| `--poll` | Wait for video completion (synchronous mode) | No |
+| `--api-key` | Google Gemini API key (or set GEMINI_API_KEY env var) | No |
+| `--base-path` | Magento base path (auto-detected when using Magento CLI) | No |
+| `--base-url` | Base URL for video URLs (auto-detected from Magento config) | No |
+
+### Output Format
+
+The Python implementation always returns JSON (unlike the PHP command which supports multiple formats):
+
+```json
+{
+  "success": true,
+  "status": "completed",
+  "videoUrl": "https://your-domain.com/media/video/veo_abc123.mp4",
+  "videoPath": "/var/www/html/pub/media/video/veo_abc123.mp4",
+  "embedUrl": "<video controls>...</video>",
+  "cached": false
+}
+```
+
+### Key Features
+
+- **Multiple Image Support**: Process multiple images with the same prompt in a single command
+- **Automatic Redirect Handling**: Python's `requests` library automatically follows 302 redirects from Google Files API
+- **Safety Filter Detection**: Detects and reports safety filter blocks with actionable suggestions
+- **Robust MIME Detection**: Uses Python's `mimetypes` library for accurate MIME type detection
+- **Caching**: Checks for cached videos before making API calls (same cache as PHP implementation)
+- **Error Handling**: Comprehensive error handling with clear JSON error messages
+- **Full HTTPS URLs**: Generates complete HTTPS URLs with domain (not relative paths)
+
+### When to Use Python Implementation
+
+**Use Python implementation when:**
+- Processing large batches of videos
+- Running video generation as background jobs
+- Need better performance for long-running operations
+- Want to decouple video processing from PHP-FPM
+- Deploying in containerized/microservice architectures
+
+**Use PHP implementation when:**
+- Simple, occasional video generation
+- Tight integration with Magento's request lifecycle
+- Prefer PHP-only solutions
+
+### Integration with Magento
+
+The Python implementation integrates seamlessly with Magento:
+
+1. **Automatic Base URL**: Magento CLI command automatically retrieves base URL from store configuration
+2. **Shared Cache**: Uses the same cache directory (`pub/media/video/`) as PHP implementation
+3. **Consistent Output**: Returns the same JSON structure as PHP implementation
+4. **Same API**: Uses the same Gemini Veo 3.1 API endpoints
+
+### Example: Batch Processing
+
+Process multiple product images in a single command:
+
+```bash
+php bin/magento agento-p:video \
+  --image-path \
+    "catalog/product/image1.jpg" \
+    "catalog/product/image2.jpg" \
+    "catalog/product/image3.jpg" \
+  --prompt "Create an animated product showcase" \
+  --aspect-ratio "16:9" \
+  --poll
+```
+
+This will generate videos for all three images and return a summary with individual results.
+
+### Troubleshooting Python Implementation
+
+**Python Not Found:**
+```bash
+# Install Python 3.7+ if not available
+sudo apt-get install python3 python3-pip  # Ubuntu/Debian
+brew install python3  # macOS
+```
+
+**Module Not Found Errors:**
+```bash
+pip install -r vendor/genaker/imageaibundle/pygento/requirements.txt
+```
+
+**Permission Errors:**
+```bash
+chmod +x vendor/genaker/imageaibundle/pygento/agento_video.py
+```
+
+**API Key Issues:**
+- Set environment variable: `export GEMINI_API_KEY=your_key`
+- Or pass via `--api-key` parameter
+- Or configure in Magento admin (used automatically)
+
+For more details, see the [Python-specific README](pygento/README.md).
 
 Navigate to **Genaker > Image Resize > Generate** to generate resize URLs with signature validation.
 
@@ -508,6 +693,9 @@ Where:
 - **PHP**: 7.4 or higher
 - **Extensions**: GD or Imagick (for image processing)
 - **Optional**: Google Gemini API key (for AI features)
+- **Optional**: Python 3.7+ (for Python video generation implementation)
+  - `google-generativeai >= 0.3.0`
+  - `requests >= 2.31.0`
 
 ## How Media App Interceptor Works
 
@@ -786,6 +974,16 @@ Copyright (c) 2024 Genaker. All rights reserved.
 For issues, questions, or contributions, please visit: https://github.com/Genaker/ImageResizeAI
 
 ## Changelog
+
+### Version 1.2.0
+- **Python Implementation**: Added Python-based video generation script with Google Generative AI SDK
+- **Magento CLI Proxy**: Added `agento-p:video` command that proxies to Python script with automatic Magento config integration
+- **Multiple Image Processing**: Python implementation supports processing multiple images in a single command
+- **Automatic Base URL**: Magento CLI command automatically retrieves base URL from store configuration
+- **Enhanced Error Handling**: Python implementation includes improved safety filter detection and error messages
+- **Robust MIME Detection**: Python implementation uses built-in `mimetypes` library for accurate MIME type detection
+- **Full HTTPS URLs**: Python implementation generates complete HTTPS URLs with domain (not relative paths)
+- **Output Format Options**: PHP command (`agento:video`) now supports JSON, plain, and table output formats
 
 ### Version 1.1.0
 - **Video Generation**: Added Google Veo 3.1 API integration for AI-powered video generation from images

@@ -39,4 +39,13 @@
     <type name="Magento\MediaStorage\Model\File\Storage">
         <plugin name="genaker_imageaibundle_storage_plugin" type="Genaker\ImageAIBundle\Plugin\MediaStorage\Model\File\StoragePlugin" sortOrder="1"/>
     </type>
+    <!-- Register console commands -->
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="agento_video" xsi:type="object">Genaker\ImageAIBundle\Console\Command\GenerateVideo</item>
+                <item name="agento_p_video" xsi:type="object">Genaker\ImageAIBundle\Console\Command\GenerateVideoPython</item>
+            </argument>
+        </arguments>
+    </type>
 </config>
