@@ -621,6 +621,74 @@ https://your-domain.com/media/resize/ip/catalog/product/w/t/wt09-white_main_1.jp
 **Note**: The module uses direct HTTP calls to Gemini API, so no SDK updates are required. Video generation works as long as your API key has Veo 3.1 access.
 
 ### Admin URL Generator
+
+## AI Image Generation Prompt Examples
+
+This section provides examples of effective prompts for AI-powered image generation and modification using Google Gemini. These prompts are language-agnostic and can be used with any implementation that supports Gemini's image generation capabilities.
+
+### Text-to-Image Generation
+
+**Photorealistic Portrait:**
+```
+A photorealistic close-up portrait of an elderly Japanese ceramicist with deep, sun-etched wrinkles and a warm, knowing smile. He is carefully inspecting a freshly glazed tea bowl. The setting is his rustic, sun-drenched workshop with pottery wheels and shelves of clay pots in the background. The scene is illuminated by soft, golden hour light streaming through a window, highlighting the fine texture of the clay and the fabric of his apron. Captured with an 85mm portrait lens, resulting in a soft, blurred background (bokeh). The overall mood is serene and masterful.
+```
+
+**Cartoon Style:**
+```
+A grid with 12 cartoon-style stickers of a penguin holding an ice cream cone and performing different activities. The penguin has oversized round eyes and stubby wings. The design uses thick outlines, cel-shading, and bright playful colors. The background must be white.
+```
+
+### Image Editing and Modification
+
+**Outfit Change:**
+```
+Create an image of the woman in this picture with the following changes:
+- She's wearing a white one-piece swimsuit.
+- She is holding a smoothie in her hands.
+- She is at the beach with the ocean behind her.
+- she is sitting on a towel on the sand.
+- she is wearing a white Panama hat.
+```
+
+**Simple Modification:**
+```
+Make the color of this woman's coat be light green and change her hat, make her wear a top hat instead.
+```
+
+### Product Photography Enhancement
+
+**Studio Product Photo:**
+```
+Given the input image, create a high-resolution studio photograph of the object. The image should have professional studio lighting with soft shadows and sharp focus to highlight the product's details. Use a clean white background and ensure the object is centered and isolated, ready for use in e-commerce or product catalogs.
+```
+
+### Logo Design and Application
+
+**Logo Creation:**
+```
+Create a sleek, minimalist logo for a tech startup called 'AstroMind'. The text should be in a modern geometric sans-serif font. Include a simple, abstract icon of a planet with rings. The color scheme is white and blue on a black background.
+```
+
+**Logo Application:**
+```
+Take the first image of the woman with brown hair, brown eyes, and a smile. Add the logo from the second image onto her black t-shirt. Position the logo on the chest on the left side of the t-shirt. Ensure the woman's face and features remain completely unchanged. The logo should look like it's naturally printed on the fabric, following the folds of the shirt.
+```
+
+### Fashion and Product Composition
+
+**Fashion Lookbook:**
+```
+Create a professional e-commerce fashion photo. Take the blue dress with white spots from the first image and let the woman from the second image wear it. Generate a realistic, full-body shot of the woman wearing the dress, with the lighting and shadows adjusted to match the outdoor environment.
+```
+
+### Prompt Engineering Tips
+
+- **Be Specific**: Include details about lighting, camera settings, mood, and composition
+- **Reference Images**: When using multiple images, clearly specify which is which (first image, second image, etc.)
+- **Style Consistency**: Maintain consistent artistic style across referenced images
+- **Technical Details**: Specify lens type, lighting conditions, and post-processing effects
+- **Output Requirements**: Define resolution, format, and intended use case
+
 ## Python Implementation for Video Generation
 
 The module includes a Python-based alternative implementation for video generation that offers enhanced performance, better error handling, and improved reliability for production environments.

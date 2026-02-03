@@ -1,6 +1,76 @@
-# Node.js CLI for Video Generation
+# Node.js CLI for Video and Image Generation
 
-This is a Node.js equivalent of the Python `agento_video.py` script. It provides the same functionality for generating videos from images using Google Gemini Veo 3.1 API.
+This is a Node.js equivalent of the Python `agento_video.py` and `agento_image.py` scripts. It provides the same functionality for generating videos and images from images using Google Gemini APIs.
+
+## Installation
+
+```bash
+cd /home/hammer/lccoins-m2/ImageResizeAI/nodegento
+npm install
+```
+
+## Image Generation
+
+The Node.js version now supports image generation using Gemini 2.5 Flash Image API, just like the Python version.
+
+### CLI Usage
+
+```bash
+# Single image generation
+node agento_image.js --model-image "image.jpg" --prompt "Create a professional fashion photo"
+
+# Two image generation
+node agento_image.js --model-image "model.jpg" --look-image "clothing.jpg" --prompt "Combine these images"
+
+# With API key
+node agento_image.js --api-key "YOUR_KEY" --model-image "image.jpg" --prompt "Generate image"
+```
+
+### Server Mode
+
+Start the HTTP server for image generation:
+
+```bash
+# Start server
+node agento_image_server.js
+
+# Or with environment variables
+GEMINI_API_KEY="your-key" node agento_image_server.js
+```
+
+The server provides the same REST API as the Python version:
+
+```bash
+# Generate image via API
+curl -X POST http://localhost:3000/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_image": "https://example.com/image1.jpg",
+    "look_image": "https://example.com/image2.jpg",
+    "prompt": "Create a professional fashion photo combining these images"
+  }'
+```
+
+### Image Generation Features
+
+- ✅ Single or two-image generation
+- ✅ URL and local file path support
+- ✅ Descriptive filename generation based on input image names
+- ✅ REST API with JSON payloads
+- ✅ Image serving and management endpoints
+- ✅ Same output format as Python version
+
+### Image Server Endpoints
+
+- `GET /health` - Health check
+- `POST /generate` - Generate images
+- `GET /images/:filename` - Serve images
+- `GET /list-images` - List generated images
+- `DELETE /images/:filename` - Delete images
+
+---
+
+# Video Generation
 
 ## Installation
 

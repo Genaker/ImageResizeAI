@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  tests:
+    build: .
+    image: agento-image-test:latest
+    volumes:
+      - .:/opt/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - RUN_REAL_API_TEST=${RUN_REAL_API_TEST:-}
+    working_dir: /opt/app
+
+  server:
+    build: .
+    image: agento-image-test:latest
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/opt/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - HOST=0.0.0.0
+      - PORT=5000
+      - DEBUG=false
+    working_dir: /opt/app
+    command: ["python3", "agento_image_server.py"]
+
+  test-server:
+    build: .
+    image: agento-image-test:latest
+    volumes:
+      - .:/opt/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    working_dir: /opt/app
+    command: ["python3", "test_server.py"]
+    depends_on:
+      - server

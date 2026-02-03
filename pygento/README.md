@@ -1,5 +1,8 @@
 # Python Console Command for Video Generation
 
+NOTE: The Node.js equivalent documentation and examples have been moved to the `nodegento` folder.
+See: ../nodegento/README.md
+
 This module provides a universal Python implementation for video generation from images using Google's Gemini Veo 3.1 API. While originally designed for Magento through the `agento:video` console command integration, this module is **universal and can work with any e-commerce system** including Shopify, Oro Commerce, Shopware, BigCommerce, and others. The Python-based architecture allows seamless integration with any platform that supports Python, making it a versatile solution for AI-powered video generation across different e-commerce ecosystems. Whether you're building integrations for Magento, Shopify, or any other platform, this module provides a consistent, powerful interface for generating product videos, promotional content, and dynamic media assets.
 
 ## Available Implementations
@@ -128,6 +131,231 @@ python agento_video.py -ip background.jpg -si foreground.jpg \
 python agento_video.py -ip img1.jpg -si img2.jpg \
   --no-auto-reference \
   -p "Your custom prompt with explicit image references"
+```
+
+## Image Generation Prompt Examples
+
+The following examples demonstrate various prompt techniques for image generation using Google's Gemini 2.5 Flash Image model. These examples show how to generate images from text prompts, modify existing images, and combine multiple images.
+
+### Basic Image Generation from Text
+
+```python
+from google import genai
+from google.genai import types
+from PIL import Image
+from io import BytesIO
+
+client = genai.Client(api_key=os.environ['GOOGLE_API_KEY'])
+
+prompt = """
+A photorealistic close-up portrait of an elderly Japanese
+ceramicist with deep, sun-etched wrinkles and a warm, knowing smile.
+He is carefully inspecting a freshly glazed tea bowl. The setting is
+his rustic, sun-drenched workshop with pottery wheels and shelves of
+clay pots in the background. The scene is illuminated by soft, golden
+hour light streaming through a window, highlighting the fine texture
+of the clay and the fabric of his apron. Captured with an 85mm portrait
+lens, resulting in a soft, blurred background (bokeh). The overall mood
+is serene and masterful.
+"""
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=prompt,
+)
+
+# Save the generated image
+image_parts = [
+    part.inline_data.data
+    for part in response.candidates[0].content.parts
+    if part.inline_data
+]
+
+if image_parts:
+    image = Image.open(BytesIO(image_parts[0]))
+    image.save("ceramicist-portrait.jpg")
+```
+
+### Image Editing with Before/After Display
+
+```python
+import matplotlib.pyplot as plt
+from PIL import Image
+from io import BytesIO
+
+def display_before_after(before_image, response):
+    # Collect generated images
+    after_images = []
+    for part in response.candidates[0].content.parts:
+        if part.inline_data is not None:
+            after_images.append(Image.open(BytesIO(part.inline_data.data)))
+
+    # Plot side by side
+    fig, axes = plt.subplots(1, len(after_images) + 1, figsize=(6 * (len(after_images) + 1), 6))
+
+    # Show before image in first subplot
+    axes[0].imshow(before_image)
+    axes[0].set_title("Before")
+    axes[0].axis("off")
+
+    # Show all generated images
+    for i, img in enumerate(after_images, start=1):
+        axes[i].imshow(img)
+        axes[i].set_title(f"After {i}")
+        axes[i].axis("off")
+
+    plt.show()
+
+# Example: Change woman's outfit and environment
+prompt = """
+Create an image of the woman in this picture with the following changes:
+- She's wearing a white one-piece swimsuit.
+- She is holding a smoothie in her hands.
+- She is at the beach with the ocean behind her.
+- she is sitting on a towel on the sand.
+- she is wearing a white Panama hat.
+"""
+
+before_image = Image.open("woman-stock-image-1.jpg")
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=[prompt, before_image],
+)
+
+display_before_after(before_image, response)
+```
+
+### Simple Image Modification
+
+```python
+prompt = (
+    "Make the color of this woman's coat be light green and change her hat, make her wear a top hat instead."
+)
+
+before_image = Image.open("woman-stock-image-1.jpg")
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=[prompt, before_image],
+)
+
+display_before_after(before_image, response)
+```
+
+### Cartoon Style Generation
+
+```python
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=(
+        "A grid with 12 cartoon-style stickers of a penguin holding an ice ",
+        "cream cone and performing different activities. ",
+        "The penguin has oversized round eyes and stubby wings. ",
+        "The design uses thick outlines, cel-shading, and bright playful ",
+        "colors. The background must be white."
+    )
+)
+
+image_parts = [
+    part.inline_data.data
+    for part in response.candidates[0].content.parts
+    if part.inline_data
+]
+
+if image_parts:
+    image = Image.open(BytesIO(image_parts[0]))
+    image.save("penguin-stickers.jpg")
+```
+
+### Product Photography Enhancement
+
+```python
+prompt = (
+    "Given the input image, create a high-resolution studio photograph "
+    "of the object. "
+    "The image should have professional studio lighting with soft shadows "
+    "and sharp focus to highlight the product's details. "
+    "Use a clean white background and ensure the object is centered "
+    "and isolated, ready for use in e-commerce or product catalogs."
+)
+
+before_image = Image.open("watch.jpg")
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=[prompt, before_image]
+)
+
+display_before_after(before_image, response)
+```
+
+### Logo Design and Application
+
+```python
+# Generate a logo
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=(
+        "Create a sleek, minimalist logo for a tech startup called 'AstroMind'. "
+        "The text should be in a modern geometric sans-serif font. "
+        "Include a simple, abstract icon of a planet with rings. "
+        "The color scheme is white and blue on a black background."
+    ),
+)
+
+# Save logo
+image_parts = [
+    part.inline_data.data
+    for part in response.candidates[0].content.parts
+    if part.inline_data
+]
+
+if image_parts:
+    logo_image = Image.open(BytesIO(image_parts[0]))
+    logo_image.save("astromind-logo.png")
+
+# Apply logo to product
+prompt = (
+    "Take the first image of the woman with brown hair,"
+    "brown eyes, and a smile. Add the logo from "
+    "the second image onto her black t-shirt. Position the logo "
+    "on the chest on the left side of the t-shirt. Ensure the woman's "
+    "face and features remain completely unchanged. The logo "
+    "should look like it's naturally printed on the fabric, "
+    "following the folds of the shirt."
+)
+
+before_image = Image.open("woman-stock-image-2.jpg")
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=[prompt, before_image, logo_image],
+)
+
+display_before_after(before_image, response)
+```
+
+### Fashion Product Composition
+
+```python
+dress_image = Image.open('dress.jpg')
+model_image = Image.open('model.jpg')
+
+prompt = """
+Create a professional e-commerce fashion photo. Take the blue
+dress with white spots from the first image and let the woman from
+the second image wear it. Generate a realistic, full-body shot of
+the woman wearing the dress, with the lighting and shadows adjusted
+to match the outdoor environment.
+"""
+
+response = client.models.generate_content(
+    model="gemini-2.5-flash-image",
+    contents=[model_image, dress_image, prompt],
+)
+
+display_before_after(model_image, response)
 ```
 
 ## Options
@@ -465,3 +693,184 @@ The Node.js version provides:
 - Support for all Python features (caching, second image, verbose mode, etc.)
 
 Choose the implementation that best fits your environment - both provide the same functionality.
+
+---
+
+# Image Generation Server
+
+This module also provides a Flask-based HTTP server for image generation using Google's Gemini 2.5 Flash Image API.
+
+## Server Features
+
+- **REST API**: Generate images via HTTP POST requests with JSON payloads
+- **Single/Two Image Support**: Generate from one or two input images
+- **URL Support**: Accept both local file paths and HTTP/HTTPS URLs
+- **Descriptive Filenames**: Auto-generated filenames based on input image names
+- **Image Serving**: Built-in endpoints to serve and manage generated images
+- **Health Checks**: API health monitoring endpoint
+
+## Server Installation
+
+The server uses the same requirements as the CLI tool. Flask is included in `requirements.txt`.
+
+## Running the Server
+
+### Using Docker Compose (Recommended)
+
+```bash
+# Set your API key
+export GEMINI_API_KEY="your-api-key-here"
+
+# Start the server
+docker-compose up server
+```
+
+The server will be available at `http://localhost:5000`
+
+### Manual Docker Run
+
+```bash
+docker build -t agento-image-server .
+docker run -p 5000:5000 -e GEMINI_API_KEY="your-key" -v $(pwd):/opt/app agento-image-server python3 agento_image_server.py
+```
+
+### Direct Python Run
+
+```bash
+export GEMINI_API_KEY="your-api-key-here"
+python3 agento_image_server.py
+```
+
+## API Endpoints
+
+### POST /generate
+Generate an image from input images and prompt.
+
+**Request Body:**
+```json
+{
+  "model_image": "https://example.com/image1.jpg",
+  "look_image": "https://example.com/image2.jpg",  // optional
+  "prompt": "Create a professional fashion photo combining these images",
+  "api_key": "optional-api-key-override"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "completed",
+  "saved_path": "/opt/app/pub/media/lookbook/filename_timestamp.jpg",
+  "filename": "filename_timestamp.jpg",
+  "message": "Image generated and saved",
+  "input": {
+    "model_image": "...",
+    "look_image": "...",
+    "prompt": "..."
+  }
+}
+```
+
+### GET /health
+Check server health and API availability.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "agento-image-server",
+  "api_available": true
+}
+```
+
+### GET /images/{filename}
+Serve a generated image file.
+
+### GET /list-images
+List all generated images with metadata.
+
+**Response:**
+```json
+{
+  "success": true,
+  "images": [
+    {
+      "filename": "image1.jpg",
+      "path": "/path/to/image1.jpg",
+      "size": 12345,
+      "modified": 1640995200.0
+    }
+  ],
+  "count": 1
+}
+```
+
+### DELETE /images/{filename}
+Delete a generated image.
+
+## Example Usage
+
+### Generate with Two Images
+```bash
+curl -X POST http://localhost:5000/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_image": "https://react-luma.cnxt.link/media/catalog/product/cache/decdbd3689b02cb033cfb093915217ec/w/s/ws01-black_main_1.jpg",
+    "look_image": "https://react-luma.cnxt.link/media/catalog/product/cache/decdbd3689b02cb033cfb093915217ec/m/j/mj12-orange_main_1.jpg",
+    "prompt": "Create a professional fashion photo combining these images"
+  }'
+```
+
+### Generate with Single Image
+```bash
+curl -X POST http://localhost:5000/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_image": "https://example.com/image.jpg",
+    "prompt": "Create a professional fashion photo from this image"
+  }'
+```
+
+### Check Health
+```bash
+curl http://localhost:5000/health
+```
+
+### List Images
+```bash
+curl http://localhost:5000/list-images
+```
+
+### Serve Image
+```bash
+curl http://localhost:5000/images/generated_image_1234567890.jpg -o image.jpg
+```
+
+## Testing the Server
+
+A test script is provided to verify server functionality:
+
+```bash
+# Start the server in one terminal
+docker-compose up server
+
+# Run tests in another terminal
+python3 test_server.py
+```
+
+Or run both together:
+
+```bash
+# This will start server and run tests (requires API key)
+GEMINI_API_KEY="your-key" docker-compose up test-server
+```
+
+### Integration Testing
+
+Run the full integration test suite:
+
+```bash
+# Run integration tests (starts server, runs tests, cleans up)
+GEMINI_API_KEY="your-key" ./test_server_integration.sh
+```

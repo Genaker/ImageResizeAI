@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  tests:
+    build: .
+    image: agento-image-node:latest
+    volumes:
+      - .:/opt/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    working_dir: /opt/app
+
+  server:
+    build: .
+    image: agento-image-node:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/opt/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - HOST=0.0.0.0
+      - PORT=3000
+      - DEBUG=false
+    working_dir: /opt/app
+    command: ["node", "agento_image_server.js"]
+
+  test-server:
+    build: .
+    image: agento-image-node:latest
+    volumes:
+      - .:/opt/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - SERVER_URL=http://server:3000
+    working_dir: /opt/app
+    command: ["node", "test_server.js"]
+    depends_on:
+      - server

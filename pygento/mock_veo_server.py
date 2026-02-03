@@ -124,32 +124,62 @@ class MockVeoAPIHandler(BaseHTTPRequestHandler):
                     'done': False
                 }
             else:
-                # Operation complete - return video URI
+                # Operation complete - decide response type based on payload
                 operation['done'] = True
-                
-                # Generate mock video URI (points back to this server for download)
-                video_id = str(uuid.uuid4())
-                # Store video ID for later download
-                operation['video_id'] = video_id
-                video_uri = f"http://{self.server.server_name}:{self.server.server_port}/videos/{video_id}"
-                
-                # Return response matching real Gemini API format
-                response_data = {
-                    'name': operation_name,
-                    'done': True,
-                    'response': {
-                        'generateVideoResponse': {
-                            'generatedSamples': [
-                                {
-                                    'video': {
-                                        'uri': video_uri,
-                                        'mimeType': 'video/mp4'
+                payload = operation.get('payload', {})
+                instance = None
+                try:
+                    instance = payload.get('instances', [])[0]
+                except Exception:
+                    instance = None
+
+                # If the instance contains modelImage and lookImage, return an image response
+                if instance and isinstance(instance, dict) and 'modelImage' in instance and 'lookImage' in instance:
+                    image_id = str(uuid.uuid4())
+                    operation['image_id'] = image_id
+                    image_uri = f"http://{self.server.server_name}:{self.server.server_port}/images/{image_id}"
+
+                    response_data = {
+                        'name': operation_name,
+                        'done': True,
+                        'response': {
+                            'generateImageResponse': {
+                                'generatedSamples': [
+                                    {
+                                        'image': {
+                                            'uri': image_uri,
+                                            'mimeType': 'image/png'
+                                        }
                                     }
-                                }
-                            ]
+                                ]
+                            }
                         }
                     }
-                }
+                else:
+                    # Default to video response
+                    # Generate mock video URI (points back to this server for download)
+                    video_id = str(uuid.uuid4())
+                    # Store video ID for later download
+                    operation['video_id'] = video_id
+                    video_uri = f"http://{self.server.server_name}:{self.server.server_port}/videos/{video_id}"
+
+                    # Return response matching real Gemini API format
+                    response_data = {
+                        'name': operation_name,
+                        'done': True,
+                        'response': {
+                            'generateVideoResponse': {
+                                'generatedSamples': [
+                                    {
+                                        'video': {
+                                            'uri': video_uri,
+                                            'mimeType': 'video/mp4'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -159,16 +189,27 @@ class MockVeoAPIHandler(BaseHTTPRequestHandler):
         # Check if this is a video download request
         elif path_parts[0] == 'videos' and len(path_parts) > 1:
             video_id = path_parts[1]
-            
+
             # Generate a minimal mock MP4 file (just headers, no actual video data)
             # This is a valid MP4 file structure (fMP4 format)
             mock_video_data = self._generate_mock_mp4()
-            
+
             self.send_response(200)
             self.send_header('Content-Type', 'video/mp4')
             self.send_header('Content-Length', str(len(mock_video_data)))
             self.end_headers()
             self.wfile.write(mock_video_data)
+
+        # Image download endpoint for nana-babana tests
+        elif path_parts[0] == 'images' and len(path_parts) > 1:
+            image_id = path_parts[1]
+            mock_png = self._generate_mock_png()
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(mock_png)))
+            self.end_headers()
+            self.wfile.write(mock_png)
             
         else:
             self.send_error(404, "Endpoint not found")
@@ -205,6 +246,23 @@ class MockVeoAPIHandler(BaseHTTPRequestHandler):
         )
         
         return mp4_data
+
+    def _generate_mock_png(self) -> bytes:
+        """
+        Generate a minimal valid PNG file (1x1) for testing
+
+        Returns:
+            Bytes of a minimal PNG file
+        """
+        # 1x1 PNG file (binary) - minimal valid PNG
+        # This is a standard 1x1 transparent PNG
+        png_hex = (
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
+            b'\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89'
+            b'\x00\x00\x00\x0bIDATx\x9cc``\x00\x00\x00\x02\x00\x01' 
+            b'\xe2!\xbc\x33\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+        return png_hex
 
 
 def main():

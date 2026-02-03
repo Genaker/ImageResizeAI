@@ -51,6 +51,95 @@ class GeminiImageModificationService
     }
 
     /**
+     * Generate image from two source images using Gemini AI
+     *
+     * @param string $modelImagePath Path to model/base image
+     * @param string $lookImagePath Path to look/apparel image
+     * @param string $prompt Generation prompt
+     * @return array Result with imagePath
+     * @throws \RuntimeException
+     */
+    public function generateImageFromImages(string $modelImagePath, string $lookImagePath, string $prompt): array
+    {
+        if (!$this->isAvailable()) {
+            throw new \RuntimeException('Gemini service is not available. Please configure the Gemini API key.');
+        }
+
+        try {
+            // Read model image file
+            $modelImageContent = $this->filesystem->fileGetContents($modelImagePath);
+            if ($modelImageContent === false) {
+                throw new \RuntimeException("Failed to read model image file: {$modelImagePath}");
+            }
+
+            // Read look image file
+            $lookImageContent = $this->filesystem->fileGetContents($lookImagePath);
+            if ($lookImageContent === false) {
+                throw new \RuntimeException("Failed to read look image file: {$lookImagePath}");
+            }
+
+            // Detect MIME types
+            $modelMimeTypeString = $this->detectMimeType($modelImagePath, $modelImageContent);
+            $lookMimeTypeString = $this->detectMimeType($lookImagePath, $lookImageContent);
+
+            // Convert string MIME types to MimeType enum
+            $modelMimeType = \Gemini\Enums\MimeType::from($modelMimeTypeString);
+            $lookMimeType = \Gemini\Enums\MimeType::from($lookMimeTypeString);
+
+            // Create blobs for Gemini API - data must be base64 encoded
+            $modelBlob = new \Gemini\Data\Blob(
+                mimeType: $modelMimeType,
+                data: base64_encode($modelImageContent)
+            );
+
+            $lookBlob = new \Gemini\Data\Blob(
+                mimeType: $lookMimeType,
+                data: base64_encode($lookImageContent)
+            );
+
+            // Get generative model instance
+            $generativeModel = $this->client->generativeModel($this->model);
+
+            // Create content with both images and prompt
+            $content = new \Gemini\Data\Content(
+                parts: [
+                    new \Gemini\Data\Part(inlineData: $modelBlob), // Model Image
+                    new \Gemini\Data\Part(inlineData: $lookBlob),  // Look/Apparel Image
+                    new \Gemini\Data\Part(text: $prompt)           // Generation Prompt
+                ]
+            );
+
+            // Generate content
+            $response = $generativeModel->generateContent($content);
+
+            // Extract image from response
+            $generatedImageContent = $this->extractImageFromResponse($response);
+
+            if ($generatedImageContent === null) {
+                throw new \RuntimeException('Failed to generate image: No image data in response');
+            }
+
+            // Save the generated image
+            $savedPath = $this->saveGeneratedImage($generatedImageContent, $modelImagePath, $lookImagePath, $prompt);
+
+            return [
+                'imagePath' => $savedPath
+            ];
+
+        } catch (\Exception $e) {
+            if ($this->logger) {
+                $this->logger->error('Image generation failed', [
+                    'modelImage' => $modelImagePath,
+                    'lookImage' => $lookImagePath,
+                    'prompt' => $prompt,
+                    'error' => $e->getMessage()
+                ]);
+            }
+            throw $e;
+        }
+    }
+
+    /**
      * Modify image using Gemini AI
      *
      * @param string $imagePath Image path
@@ -370,6 +459,76 @@ class GeminiImageModificationService
         ];
 
         return $mimeToExt[$mimeType] ?? 'jpg';
+    }
+
+    /**
+     * Save generated image to file system
+     *
+     * @param string $imageContent Binary image content
+     * @param string $modelImagePath Original model image path
+     * @param string $lookImagePath Original look image path
+     * @param string $prompt Generation prompt
+     * @return string Path where image was saved
+     * @throws \RuntimeException
+     */
+    private function saveGeneratedImage(string $imageContent, string $modelImagePath, string $lookImagePath, string $prompt): string
+    {
+        try {
+            // Detect MIME type from image content
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = finfo_buffer($finfo, $imageContent);
+            finfo_close($finfo);
+
+            // Get file extension
+            $extension = $this->getExtensionFromMimeType($mimeType);
+
+            // Generate filename based on input images and prompt
+            $modelFilename = pathinfo($modelImagePath, PATHINFO_FILENAME);
+            $lookFilename = pathinfo($lookImagePath, PATHINFO_FILENAME);
+            $promptHash = substr(md5($prompt), 0, 8);
+            $timestamp = time();
+
+            $filename = sprintf(
+                'generated_%s_%s_%s_%d.%s',
+                $modelFilename,
+                $lookFilename,
+                $promptHash,
+                $timestamp,
+                $extension
+            );
+
+            // Create directory if it doesn't exist
+            $outputDir = BP . '/pub/media/genai';
+            if (!is_dir($outputDir)) {
+                mkdir($outputDir, 0755, true);
+            }
+
+            // Save the image
+            $filePath = $outputDir . '/' . $filename;
+            $result = file_put_contents($filePath, $imageContent);
+
+            if ($result === false) {
+                throw new \RuntimeException("Failed to save generated image to: {$filePath}");
+            }
+
+            if ($this->logger) {
+                $this->logger->info('Generated image saved', [
+                    'path' => $filePath,
+                    'size' => strlen($imageContent),
+                    'mimeType' => $mimeType
+                ]);
+            }
+
+            return $filePath;
+
+        } catch (\Exception $e) {
+            if ($this->logger) {
+                $this->logger->error('Failed to save generated image', [
+                    'error' => $e->getMessage()
+                ]);
+            }
+            throw new \RuntimeException('Failed to save generated image: ' . $e->getMessage());
+        }
     }
 }
 

@@ -46,6 +46,8 @@
             <argument name="commands" xsi:type="array">
                 <item name="agento_video" xsi:type="object">Genaker\ImageAIBundle\Console\Command\GenerateVideo</item>
                 <item name="agento_p_video" xsi:type="object">Genaker\ImageAIBundle\Console\Command\GenerateVideoPython</item>
+                <item name="agento_image" xsi:type="object">Genaker\ImageAIBundle\Console\Command\GenerateImage</item>
+                <item name="agento_p_image" xsi:type="object">Genaker\ImageAIBundle\Console\Command\GenerateImagePython</item>
             </argument>
         </arguments>
     </type>
